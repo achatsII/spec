@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 210 100% 50%; /* #0078FF */
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 210 100% 50%; /* #0078FF */
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 100% 50%;
+    --primary-foreground: 222.2 84% 4.9%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 94.1%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  /* Styles personnalisés InPlan */
+  .inplan-primary {
+    @apply text-[#0078FF];
+  }
+
+  .inplan-bg-primary {
+    @apply bg-[#0078FF];
+  }
+
+  .inplan-border-primary {
+    @apply border-[#0078FF];
+  }
+
+  .inplan-gradient {
+    background: linear-gradient(135deg, #0078ff 0%, #0056cc 100%);
+  }
+
+  .calculation-card {
+    @apply border-l-4 transition-all duration-200;
+  }
+
+  .calculation-card:hover {
+    @apply shadow-md transform translate-y-[-1px];
+  }
+
+  .calculation-card.selected {
+    @apply border-l-[#0078FF] bg-[#0078FF]/5 shadow-lg;
+  }
+
+  .demo-header {
+    @apply bg-white rounded-lg shadow-sm border p-8 text-center;
+  }
+
+  .demo-section {
+    @apply border-[#0078FF]/20;
+  }
+
+  .demo-section-header {
+    @apply bg-[#0078FF]/5;
+  }
+
+  .demo-section-title {
+    @apply text-[#0078FF];
+  }
+
+  /* Animation pour le logo */
+  .logo-container {
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  .logo-container:hover {
+    @apply transform scale-105;
+  }
+
+  /* Styles pour le badge de version */
+  .version-badge {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium;
+    @apply bg-[#0078FF]/10 text-[#0078FF] border border-[#0078FF]/20;
+  }
+}
