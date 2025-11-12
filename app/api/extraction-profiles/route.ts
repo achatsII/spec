@@ -1,30 +1,24 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { callGateway } from "@/lib/api-gateway"
 
-const API_ENDPOINT = "https://n8n.tools.intelligenceindustrielle.com/webhook/6852d509-086a-4415-a48c-ca72e7ceedb3"
+const APP_IDENTIFIER = "technical-drawing-analyzer"
+const DATA_TYPE = "extraction-profile"
 
 export async function GET() {
   try {
     console.log("Début de la requête GET_ALL pour les profils d'extraction")
 
-    const response = await fetch(API_ENDPOINT, {
+    // Utiliser le filtre MongoDB pour ne récupérer que les profils de cette app
+    const response = await callGateway(`/api/v1/data/${DATA_TYPE}/filter`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify({
-        action: "GET_ALL",
-        software_id: "technical-drawing-analyzer",
-        data_type: "extraction-profile",
+        mongo_filter: {
+          "json_data.app_identifier": {
+            "$eq": APP_IDENTIFIER,
+          },
+        },
       }),
     })
-
-    if (!response.ok) {
-      return NextResponse.json({
-        success: false,
-        profiles: [],
-        error: `Erreur HTTP: ${response.status}`,
-      })
-    }
 
     const data = await response.json()
 
@@ -64,15 +58,9 @@ export async function POST(request: NextRequest) {
 
     const now = new Date().toISOString()
 
-    const response = await fetch(API_ENDPOINT, {
+    const response = await callGateway(`/api/v1/data/${DATA_TYPE}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify({
-        action: "POST",
-        software_id: "technical-drawing-analyzer",
-        data_type: "extraction-profile",
         description: `Profil d'extraction: ${profile.name}`,
         json_data: {
           name: profile.name,
@@ -80,6 +68,7 @@ export async function POST(request: NextRequest) {
           customFields: profile.customFields || [],
           formulas: profile.formulas || [],
           compatibleMaterialIds: profile.compatibleMaterialIds || [],
+          app_identifier: APP_IDENTIFIER,
           createdAt: now,
           updatedAt: now,
         },
@@ -88,7 +77,7 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json()
 
-    if (data.success) {
+    if (data.success && data.results?.[0]?.inserted_id) {
       return NextResponse.json({ success: true, id: data.results[0].inserted_id })
     } else {
       return NextResponse.json({ success: false, error: "Erreur lors de la sauvegarde" })

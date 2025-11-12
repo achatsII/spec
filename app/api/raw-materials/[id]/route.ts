@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { callGateway } from "@/lib/api-gateway"
 
-const API_ENDPOINT = "https://n8n.tools.intelligenceindustrielle.com/webhook/6852d509-086a-4415-a48c-ca72e7ceedb3"
+const APP_IDENTIFIER = "technical-drawing-analyzer"
+const DATA_TYPE = "raw-material"
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -14,16 +16,9 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ success: false, error: "Le nom de la matière première est obligatoire" })
     }
 
-    const response = await fetch(API_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+    const response = await callGateway(`/api/v1/data/${DATA_TYPE}/one/${materialId}`, {
+      method: "PUT",
       body: JSON.stringify({
-        action: "UPDATE",
-        software_id: "technical-drawing-analyzer",
-        data_type: "raw-material",
-        document_id: materialId,
         description: `Matière première: ${material.name}`,
         json_data: {
           name: material.name,
@@ -36,6 +31,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
           supplier: material.supplier || "",
           reference: material.reference || "",
           notes: material.notes || "",
+          app_identifier: APP_IDENTIFIER,
           createdAt: material.createdAt,
           updatedAt: new Date().toISOString(),
         },
@@ -64,17 +60,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     const materialId = params.id
     console.log("Suppression de la matière première:", materialId)
 
-    const response = await fetch(API_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        action: "DELETE",
-        software_id: "technical-drawing-analyzer",
-        data_type: "raw-material",
-        document_id: materialId,
-      }),
+    const response = await callGateway(`/api/v1/data/${DATA_TYPE}/${materialId}`, {
+      method: "DELETE",
     })
 
     const data = await response.json()

@@ -1,31 +1,24 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { callGateway } from "@/lib/api-gateway"
 
-const API_ENDPOINT = "https://n8n.tools.intelligenceindustrielle.com/webhook/6852d509-086a-4415-a48c-ca72e7ceedb3"
+const APP_IDENTIFIER = "technical-drawing-analyzer"
+const DATA_TYPE = "analysis"
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const analysisId = params.id
     console.log("Récupération de l'analyse:", analysisId)
 
-    const response = await fetch(API_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        action: "GET",
-        software_id: "technical-drawing-analyzer",
-        data_type: "analysis",
-        document_id: analysisId,
-      }),
+    const response = await callGateway(`/api/v1/data/${DATA_TYPE}/one/${analysisId}`, {
+      method: "GET",
     })
 
     const data = await response.json()
 
-    if (data.success && data.results?.[0]) {
+    if (data.success && data.result) {
       const analysis = {
-        id: data.results[0]._id,
-        ...data.results[0].json_data,
+        id: data.result._id,
+        ...data.result.json_data,
       }
       return NextResponse.json({ success: true, analysis })
     } else {
@@ -47,19 +40,13 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
     console.log("Mise à jour de l'analyse:", analysisId)
 
-    const response = await fetch(API_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+    const response = await callGateway(`/api/v1/data/${DATA_TYPE}/one/${analysisId}`, {
+      method: "PUT",
       body: JSON.stringify({
-        action: "UPDATE",
-        software_id: "technical-drawing-analyzer",
-        data_type: "analysis",
-        document_id: analysisId,
         description: `Analyse: ${analysis.title}`,
         json_data: {
           ...analysis,
+          app_identifier: APP_IDENTIFIER,
           updatedAt: new Date().toISOString(),
         },
       }),
@@ -87,17 +74,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     const analysisId = params.id
     console.log("Suppression de l'analyse:", analysisId)
 
-    const response = await fetch(API_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        action: "DELETE",
-        software_id: "technical-drawing-analyzer",
-        data_type: "analysis",
-        document_id: analysisId,
-      }),
+    const response = await callGateway(`/api/v1/data/${DATA_TYPE}/${analysisId}`, {
+      method: "DELETE",
     })
 
     const data = await response.json()
@@ -106,7 +84,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     if (data.success) {
       return NextResponse.json({ success: true })
     } else {
-      return NextResponse.json({ success: false, error: "Erreur lors de la suppression" })
+      return NextResponse.json({ success: false, error: data.error || "Erreur lors de la suppression" })
     }
   } catch (error) {
     console.error("Erreur lors de la suppression de l'analyse:", error)

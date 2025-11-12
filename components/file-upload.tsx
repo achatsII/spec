@@ -14,9 +14,10 @@ interface FileUploadProps {
   isAnalyzing: boolean
   setIsAnalyzing: (analyzing: boolean) => void
   onFileSelected?: (file: File) => void
+  contextText?: string
 }
 
-export default function FileUpload({ onFileAnalyzed, clientProfile, isAnalyzing, setIsAnalyzing, onFileSelected }: FileUploadProps) {
+export default function FileUpload({ onFileAnalyzed, clientProfile, isAnalyzing, setIsAnalyzing, onFileSelected, contextText }: FileUploadProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -42,25 +43,44 @@ export default function FileUpload({ onFileAnalyzed, clientProfile, isAnalyzing,
       // Générer l'instruction de base
       let instruction = `Tu es un ingenieur industriel specialise dans l interpretation rigoureuse de plans techniques. Tu dois extraire des informations techniques precises, structurees et exploitables automatiquement a partir d un dessin technique. Extraire toutes les informations necessaires a l estimation de prix ou a la fabrication d une piece. Ces donnees doivent etre normalisees, fiables, structurees, contextualisees et accompagnees d un niveau de confiance et d une justification. Tu dois repondre en JSON structure, avec pour chaque champ: valeur (valeur extraite ou deduite), confiance (un score de 0 a 100), raison (explication de comment tu as obtenu la valeur). Format attendu: {reference_dessin: {valeur: ..., confiance: 95, raison: Present dans le cartouche}, description: {valeur: ..., confiance: 80, raison: Mention dans le cartouche ou texte descriptif}, materiau: {valeur: ..., confiance: 100, raison: Indique dans la zone materiau}, type_piece: {valeur: tube | plat | corniere | plaque | autre, confiance: 90, raison: Deduit de la geometrie ou du texte}, dimensions: {longueur: {valeur: ..., unite: ..., confiance: ..., raison: ...}, largeur: {valeur: ..., unite: ..., confiance: ..., raison: ...}, hauteur: {valeur: ..., unite: ..., confiance: ..., raison: ...}, epaisseur: {valeur: ..., unite: ..., confiance: ..., raison: ...}}, procedes: [{valeur: decoupe laser | pliage | percage | taraudage | filetage | autre, confiance: 90, raison: Indique dans la legende ou infere du plan}], notes_importantes: [{contenu: ..., confiance: 80, raison: Note visible sur le plan technique}]`
 
-      // Ajouter les champs personnalisés du profil
-      if (clientProfile?.customFields && clientProfile.customFields.length > 0) {
-        instruction += `, champs_personnalises: {`
-        const customFieldsPrompts = clientProfile.customFields.map((field) => {
-          const fieldDescription = field.prompt || `Extraire ${field.label || field.name}`
-          if (field.type === "complex" && field.structure) {
-            const properties = field.structure.properties.map((p) => `${p.name}: ...`).join(", ")
-            return `${field.name}: {${properties}, confiance: ..., raison: "${fieldDescription}"}`
-          } else if (field.type === "array") {
-            return `${field.name}: [{valeur: ..., confiance: ..., raison: "${fieldDescription}"}]`
-          } else {
-            return `${field.name}: {valeur: ..., confiance: ..., raison: "${fieldDescription}"}`
-          }
-        })
-        instruction += customFieldsPrompts.join(", ")
-        instruction += `}`
+      // Ajouter les instructions spécifiques du profil d'extraction si disponible
+      if (clientProfile) {
+        // Ajouter la description du profil comme instruction système
+        if (clientProfile.description && clientProfile.description.trim()) {
+          instruction += `\n\nINSTRUCTIONS SPECIFIQUES DU PROFIL D'EXTRACTION "${clientProfile.name}":\n${clientProfile.description.trim()}\n\nCes instructions sont prioritaires et doivent etre suivies precisement. Assure-toi d'extraire toutes les informations mentionnees dans ces instructions, notamment dans les notes_importantes si pertinent.`
+        }
+
+        // Ajouter les champs personnalisés du profil
+        if (clientProfile.customFields && clientProfile.customFields.length > 0) {
+          instruction += `\n\nCHAMPS PERSONNALISES A EXTRAIRE:\n`
+          clientProfile.customFields.forEach((field) => {
+            const fieldDescription = field.prompt || `Extraire ${field.label || field.name}`
+            instruction += `- ${field.name}: ${fieldDescription}\n`
+          })
+          
+          instruction += `\nCes champs doivent etre inclus dans champs_personnalises avec le format suivant: champs_personnalises: {`
+          const customFieldsPrompts = clientProfile.customFields.map((field) => {
+            const fieldDescription = field.prompt || `Extraire ${field.label || field.name}`
+            if (field.type === "complex" && field.structure) {
+              const properties = field.structure.properties.map((p) => `${p.name}: ...`).join(", ")
+              return `${field.name}: {${properties}, confiance: ..., raison: "${fieldDescription}"}`
+            } else if (field.type === "array") {
+              return `${field.name}: [{valeur: ..., confiance: ..., raison: "${fieldDescription}"}]`
+            } else {
+              return `${field.name}: {valeur: ..., confiance: ..., raison: "${fieldDescription}"}`
+            }
+          })
+          instruction += customFieldsPrompts.join(", ")
+          instruction += `}`
+        }
       }
 
       instruction += `}. Ne jamais inventer d information si elle n est pas visible. Toujours expliquer comment chaque valeur a ete trouvee. Si une unite est implicite, tu peux la deduire mais avec prudence. Utilise ton jugement d expert pour identifier des procedes ou types standards. Tu dois rendre la sortie exploitable automatiquement: pas de texte hors JSON. En cas de doute: si une valeur est manquante ou illisible, utilise valeur: Non specifie avec confiance: 0 et une raison claire.`
+
+      // Ajouter le contexte texte si fourni
+      if (contextText && contextText.trim()) {
+        instruction += `\n\nCONTEXTE ADDITIONNEL FOURNI PAR L'UTILISATEUR:\n${contextText.trim()}\n\nUtilise ce contexte pour enrichir et contextualiser ton analyse. Si le contexte contient des informations pertinentes (ex: courriel, notes, specifications), prends-les en compte pour ameliorer la precision de l'extraction.`
+      }
 
       // Appel à l'API d'analyse via notre API route pour éviter CORS
       const formData = new FormData()

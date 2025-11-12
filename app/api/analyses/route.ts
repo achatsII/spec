@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { callGateway } from "@/lib/api-gateway"
 
-const API_ENDPOINT = "https://n8n.tools.intelligenceindustrielle.com/webhook/6852d509-086a-4415-a48c-ca72e7ceedb3"
+const APP_IDENTIFIER = "technical-drawing-analyzer"
+const DATA_TYPE = "analysis"
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,49 +11,36 @@ export async function GET(request: NextRequest) {
 
     console.log("Début de la requête GET_ALL pour les analyses", clientId ? `du client ${clientId}` : "")
 
-    const response = await fetch(API_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    // Construire le filtre MongoDB
+    const mongoFilter: any = {
+      "json_data.app_identifier": {
+        "$eq": APP_IDENTIFIER,
       },
+    }
+
+    // Ajouter le filtre client si demandé
+    if (clientId) {
+      mongoFilter["json_data.clientId"] = {
+        "$eq": clientId,
+      }
+    }
+
+    const response = await callGateway(`/api/v1/data/${DATA_TYPE}/filter`, {
+      method: "POST",
       body: JSON.stringify({
-        action: "GET_ALL",
-        software_id: "technical-drawing-analyzer",
-        data_type: "analysis",
+        mongo_filter: mongoFilter,
       }),
     })
-
-    if (!response.ok) {
-      return NextResponse.json({
-        success: false,
-        analyses: [],
-        error: `Erreur HTTP: ${response.status}`,
-      })
-    }
-
-    const contentType = response.headers.get("content-type")
-    if (!contentType || !contentType.includes("application/json")) {
-      return NextResponse.json({
-        success: false,
-        analyses: [],
-        error: "Réponse invalide de l'API externe",
-      })
-    }
 
     const data = await response.json()
 
     if (data.success && Array.isArray(data.results)) {
-      let analyses = data.results.map((result: any) => ({
+      const analyses = data.results.map((result: any) => ({
         id: result._id,
         ...result.json_data,
         createdAt: result.json_data?.createdAt || new Date().toISOString(),
         updatedAt: result.json_data?.updatedAt || new Date().toISOString(),
       }))
-
-      // Filtrer par client si demandé
-      if (clientId) {
-        analyses = analyses.filter((a: any) => a.clientId === clientId)
-      }
 
       console.log("Analyses traitées:", analyses.length)
       return NextResponse.json({ success: true, analyses })
@@ -84,18 +73,13 @@ export async function POST(request: NextRequest) {
 
     const now = new Date().toISOString()
 
-    const response = await fetch(API_ENDPOINT, {
+    const response = await callGateway(`/api/v1/data/${DATA_TYPE}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify({
-        action: "POST",
-        software_id: "technical-drawing-analyzer",
-        data_type: "analysis",
         description: `Analyse: ${analysis.title}`,
         json_data: {
           ...analysis,
+          app_identifier: APP_IDENTIFIER,
           createdAt: now,
           updatedAt: now,
         },
@@ -105,7 +89,7 @@ export async function POST(request: NextRequest) {
     const data = await response.json()
     console.log("Réponse API POST:", data)
 
-    if (data.success) {
+    if (data.success && data.results?.[0]?.inserted_id) {
       return NextResponse.json({ success: true, id: data.results[0].inserted_id })
     } else {
       return NextResponse.json({ success: false, error: "Erreur lors de la sauvegarde" })

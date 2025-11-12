@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { callGateway } from "@/lib/api-gateway"
 
-const API_ENDPOINT = "https://n8n.tools.intelligenceindustrielle.com/webhook/6852d509-086a-4415-a48c-ca72e7ceedb3"
+const APP_IDENTIFIER = "technical-drawing-analyzer"
+const DATA_TYPE = "client-profile"
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -14,42 +16,18 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ success: false, error: "Le nom du profil est obligatoire" })
     }
 
-    const response = await fetch(API_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+    const response = await callGateway(`/api/v1/data/${DATA_TYPE}/one/${profileId}`, {
+      method: "PUT",
       body: JSON.stringify({
-        action: "UPDATE",
-        record_id: profileId,
-        software_id: "technical-drawing-analyzer",
-        data_type: "client-profile",
         description: `Profil client: ${profile.name}`,
         json_data: {
           name: profile.name,
           materials: profile.materials || [],
           formulas: profile.formulas || [],
+          app_identifier: APP_IDENTIFIER,
         },
       }),
     })
-
-    if (!response.ok) {
-      console.error("Erreur HTTP lors de la mise à jour:", response.status)
-      return NextResponse.json({
-        success: false,
-        error: `Erreur HTTP: ${response.status}`,
-      })
-    }
-
-    const contentType = response.headers.get("content-type")
-    if (!contentType || !contentType.includes("application/json")) {
-      const textResponse = await response.text()
-      console.error("Réponse non-JSON lors de la mise à jour:", textResponse)
-      return NextResponse.json({
-        success: false,
-        error: "Réponse invalide de l'API externe",
-      })
-    }
 
     const data = await response.json()
     console.log("Réponse API UPDATE:", data)
@@ -76,34 +54,9 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     const profileId = params.id
     console.log("Suppression du profil:", profileId)
 
-    const response = await fetch(API_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        action: "DELETE",
-        record_id: profileId,
-      }),
+    const response = await callGateway(`/api/v1/data/${DATA_TYPE}/${profileId}`, {
+      method: "DELETE",
     })
-
-    if (!response.ok) {
-      console.error("Erreur HTTP lors de la suppression:", response.status)
-      return NextResponse.json({
-        success: false,
-        error: `Erreur HTTP: ${response.status}`,
-      })
-    }
-
-    const contentType = response.headers.get("content-type")
-    if (!contentType || !contentType.includes("application/json")) {
-      const textResponse = await response.text()
-      console.error("Réponse non-JSON lors de la suppression:", textResponse)
-      return NextResponse.json({
-        success: false,
-        error: "Réponse invalide de l'API externe",
-      })
-    }
 
     const data = await response.json()
     console.log("Réponse API DELETE:", data)

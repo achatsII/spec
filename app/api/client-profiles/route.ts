@@ -1,46 +1,24 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { callGateway } from "@/lib/api-gateway"
 
-const API_ENDPOINT = "https://n8n.tools.intelligenceindustrielle.com/webhook/6852d509-086a-4415-a48c-ca72e7ceedb3"
+const APP_IDENTIFIER = "technical-drawing-analyzer"
+const DATA_TYPE = "client-profile"
 
 export async function GET() {
   try {
     console.log("Début de la requête GET_ALL pour les profils")
 
-    const response = await fetch(API_ENDPOINT, {
+    // Utiliser le filtre MongoDB pour ne récupérer que les profils de cette app
+    const response = await callGateway(`/api/v1/data/${DATA_TYPE}/filter`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify({
-        action: "GET_ALL",
-        software_id: "technical-drawing-analyzer",
-        data_type: "client-profile",
+        mongo_filter: {
+          "json_data.app_identifier": {
+            "$eq": APP_IDENTIFIER,
+          },
+        },
       }),
     })
-
-    console.log("Statut de la réponse:", response.status)
-
-    if (!response.ok) {
-      console.error("Erreur HTTP:", response.status, response.statusText)
-      return NextResponse.json({
-        success: false,
-        profiles: [],
-        error: `Erreur HTTP: ${response.status}`,
-      })
-    }
-
-    const contentType = response.headers.get("content-type")
-    console.log("Content-Type:", contentType)
-
-    if (!contentType || !contentType.includes("application/json")) {
-      const textResponse = await response.text()
-      console.error("Réponse non-JSON:", textResponse)
-      return NextResponse.json({
-        success: false,
-        profiles: [],
-        error: "Réponse invalide de l'API externe",
-      })
-    }
 
     const data = await response.json()
     console.log("Réponse API GET_ALL:", data)
@@ -79,20 +57,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Le nom du profil est obligatoire" })
     }
 
-    const response = await fetch(API_ENDPOINT, {
+    const response = await callGateway(`/api/v1/data/${DATA_TYPE}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify({
-        action: "POST",
-        software_id: "technical-drawing-analyzer",
-        data_type: "client-profile",
         description: `Profil client: ${profile.name}`,
         json_data: {
           name: profile.name,
           materials: profile.materials || [],
           formulas: profile.formulas || [],
+          app_identifier: APP_IDENTIFIER,
         },
       }),
     })
@@ -100,7 +73,7 @@ export async function POST(request: NextRequest) {
     const data = await response.json()
     console.log("Réponse API POST:", data)
 
-    if (data.success) {
+    if (data.success && data.results?.[0]?.inserted_id) {
       return NextResponse.json({ success: true, id: data.results[0].inserted_id })
     } else {
       return NextResponse.json({ success: false, error: "Erreur lors de la sauvegarde" })

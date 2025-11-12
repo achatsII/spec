@@ -103,6 +103,11 @@ export default function TechnicalDrawingAnalyzer() {
       return
     }
 
+    if (!quantity || quantity < 1) {
+      alert("La quantité de pièces est obligatoire et doit être d'au moins 1")
+      return
+    }
+
     setIsSaving(true)
 
     try {
@@ -325,14 +330,20 @@ export default function TechnicalDrawingAnalyzer() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="quantity">Quantité de pièces</Label>
+                  <Label htmlFor="quantity">
+                    Quantité de pièces <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     id="quantity"
                     type="number"
                     min="1"
+                    required
                     value={quantity}
                     onChange={(e) => setQuantity(Number.parseInt(e.target.value) || 1)}
                   />
+                  {quantity < 1 && (
+                    <p className="text-sm text-red-600">La quantité doit être d'au moins 1 pièce</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -393,6 +404,7 @@ export default function TechnicalDrawingAnalyzer() {
                   isAnalyzing={isAnalyzing}
                   setIsAnalyzing={setIsAnalyzing}
                   onFileSelected={handleFileSelected}
+                  contextText={contextText}
                 />
               </CardContent>
             </Card>

@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { callGateway } from "@/lib/api-gateway"
 
-const API_ENDPOINT = "https://n8n.tools.intelligenceindustrielle.com/webhook/6852d509-086a-4415-a48c-ca72e7ceedb3"
+const APP_IDENTIFIER = "technical-drawing-analyzer"
+const DATA_TYPE = "extraction-profile"
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -11,16 +13,9 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ success: false, error: "Le nom du profil est obligatoire" })
     }
 
-    const response = await fetch(API_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+    const response = await callGateway(`/api/v1/data/${DATA_TYPE}/one/${profileId}`, {
+      method: "PUT",
       body: JSON.stringify({
-        action: "UPDATE",
-        software_id: "technical-drawing-analyzer",
-        data_type: "extraction-profile",
-        document_id: profileId,
         description: `Profil d'extraction: ${profile.name}`,
         json_data: {
           name: profile.name,
@@ -28,6 +23,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
           customFields: profile.customFields || [],
           formulas: profile.formulas || [],
           compatibleMaterialIds: profile.compatibleMaterialIds || [],
+          app_identifier: APP_IDENTIFIER,
           createdAt: profile.createdAt,
           updatedAt: new Date().toISOString(),
         },
@@ -54,17 +50,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
   try {
     const profileId = params.id
 
-    const response = await fetch(API_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        action: "DELETE",
-        software_id: "technical-drawing-analyzer",
-        data_type: "extraction-profile",
-        document_id: profileId,
-      }),
+    const response = await callGateway(`/api/v1/data/${DATA_TYPE}/${profileId}`, {
+      method: "DELETE",
     })
 
     const data = await response.json()
