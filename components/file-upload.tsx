@@ -6,16 +6,17 @@ import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Upload, FileText, Loader2, AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import type { ClientProfile, AnalysisResult } from "@/types/analysis"
+import type { ExtractionProfile, AnalysisResult } from "@/types/analysis"
 
 interface FileUploadProps {
   onFileAnalyzed: (result: AnalysisResult) => void
-  clientProfile: ClientProfile | null
+  clientProfile: ExtractionProfile | null
   isAnalyzing: boolean
   setIsAnalyzing: (analyzing: boolean) => void
+  onFileSelected?: (file: File) => void
 }
 
-export default function FileUpload({ onFileAnalyzed, clientProfile, isAnalyzing, setIsAnalyzing }: FileUploadProps) {
+export default function FileUpload({ onFileAnalyzed, clientProfile, isAnalyzing, setIsAnalyzing, onFileSelected }: FileUploadProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -25,6 +26,9 @@ export default function FileUpload({ onFileAnalyzed, clientProfile, isAnalyzing,
     if (file) {
       setSelectedFile(file)
       setError(null)
+      if (onFileSelected) {
+        onFileSelected(file)
+      }
     }
   }
 
@@ -35,8 +39,28 @@ export default function FileUpload({ onFileAnalyzed, clientProfile, isAnalyzing,
     setError(null)
 
     try {
-      // Préparer l'instruction pour l'API
-      const instruction = `Tu es un ingenieur industriel specialise dans l interpretation rigoureuse de plans techniques. Tu dois extraire des informations techniques precises, structurees et exploitables automatiquement a partir d un dessin technique. Extraire toutes les informations necessaires a l estimation de prix ou a la fabrication d une piece. Ces donnees doivent etre normalisees, fiables, structurees, contextualisees et accompagnees d un niveau de confiance et d une justification. Tu dois repondre en JSON structure, avec pour chaque champ: valeur (valeur extraite ou deduite), confiance (un score de 0 a 100), raison (explication de comment tu as obtenu la valeur). Format attendu: {reference_dessin: {valeur: ..., confiance: 95, raison: Present dans le cartouche}, description: {valeur: ..., confiance: 80, raison: Mention dans le cartouche ou texte descriptif}, materiau: {valeur: ..., confiance: 100, raison: Indique dans la zone materiau}, type_piece: {valeur: tube | plat | corniere | plaque | autre, confiance: 90, raison: Deduit de la geometrie ou du texte}, dimensions: {longueur: {valeur: ..., unite: ..., confiance: ..., raison: ...}, largeur: {valeur: ..., unite: ..., confiance: ..., raison: ...}, hauteur: {valeur: ..., unite: ..., confiance: ..., raison: ...}, epaisseur: {valeur: ..., unite: ..., confiance: ..., raison: ...}}, procedes: [{valeur: decoupe laser | pliage | percage | taraudage | filetage | autre, confiance: 90, raison: Indique dans la legende ou infere du plan}], notes_importantes: [{contenu: ..., confiance: 80, raison: Note visible sur le plan technique}]}. Ne jamais inventer d information si elle n est pas visible. Toujours expliquer comment chaque valeur a ete trouvee. Si une unite est implicite, tu peux la deduire mais avec prudence. Utilise ton jugement d expert pour identifier des procedes ou types standards. Tu dois rendre la sortie exploitable automatiquement: pas de texte hors JSON. En cas de doute: si une valeur est manquante ou illisible, utilise valeur: Non specifie avec confiance: 0 et une raison claire.`
+      // Générer l'instruction de base
+      let instruction = `Tu es un ingenieur industriel specialise dans l interpretation rigoureuse de plans techniques. Tu dois extraire des informations techniques precises, structurees et exploitables automatiquement a partir d un dessin technique. Extraire toutes les informations necessaires a l estimation de prix ou a la fabrication d une piece. Ces donnees doivent etre normalisees, fiables, structurees, contextualisees et accompagnees d un niveau de confiance et d une justification. Tu dois repondre en JSON structure, avec pour chaque champ: valeur (valeur extraite ou deduite), confiance (un score de 0 a 100), raison (explication de comment tu as obtenu la valeur). Format attendu: {reference_dessin: {valeur: ..., confiance: 95, raison: Present dans le cartouche}, description: {valeur: ..., confiance: 80, raison: Mention dans le cartouche ou texte descriptif}, materiau: {valeur: ..., confiance: 100, raison: Indique dans la zone materiau}, type_piece: {valeur: tube | plat | corniere | plaque | autre, confiance: 90, raison: Deduit de la geometrie ou du texte}, dimensions: {longueur: {valeur: ..., unite: ..., confiance: ..., raison: ...}, largeur: {valeur: ..., unite: ..., confiance: ..., raison: ...}, hauteur: {valeur: ..., unite: ..., confiance: ..., raison: ...}, epaisseur: {valeur: ..., unite: ..., confiance: ..., raison: ...}}, procedes: [{valeur: decoupe laser | pliage | percage | taraudage | filetage | autre, confiance: 90, raison: Indique dans la legende ou infere du plan}], notes_importantes: [{contenu: ..., confiance: 80, raison: Note visible sur le plan technique}]`
+
+      // Ajouter les champs personnalisés du profil
+      if (clientProfile?.customFields && clientProfile.customFields.length > 0) {
+        instruction += `, champs_personnalises: {`
+        const customFieldsPrompts = clientProfile.customFields.map((field) => {
+          const fieldDescription = field.prompt || `Extraire ${field.label || field.name}`
+          if (field.type === "complex" && field.structure) {
+            const properties = field.structure.properties.map((p) => `${p.name}: ...`).join(", ")
+            return `${field.name}: {${properties}, confiance: ..., raison: "${fieldDescription}"}`
+          } else if (field.type === "array") {
+            return `${field.name}: [{valeur: ..., confiance: ..., raison: "${fieldDescription}"}]`
+          } else {
+            return `${field.name}: {valeur: ..., confiance: ..., raison: "${fieldDescription}"}`
+          }
+        })
+        instruction += customFieldsPrompts.join(", ")
+        instruction += `}`
+      }
+
+      instruction += `}. Ne jamais inventer d information si elle n est pas visible. Toujours expliquer comment chaque valeur a ete trouvee. Si une unite est implicite, tu peux la deduire mais avec prudence. Utilise ton jugement d expert pour identifier des procedes ou types standards. Tu dois rendre la sortie exploitable automatiquement: pas de texte hors JSON. En cas de doute: si une valeur est manquante ou illisible, utilise valeur: Non specifie avec confiance: 0 et une raison claire.`
 
       // Appel à l'API d'analyse via notre API route pour éviter CORS
       const formData = new FormData()
@@ -58,6 +82,14 @@ export default function FileUpload({ onFileAnalyzed, clientProfile, isAnalyzing,
       console.log("Réponse de l'API:", data)
 
       if (data.success && data.analysisData) {
+        // Extraire les champs personnalisés si présents
+        const customFields: Record<string, any> = {}
+        if (data.analysisData.champs_personnalises) {
+          Object.entries(data.analysisData.champs_personnalises).forEach(([key, value]) => {
+            customFields[key] = value
+          })
+        }
+
         const result: AnalysisResult = {
           id: Date.now().toString(),
           fileName: selectedFile.name,
@@ -82,6 +114,7 @@ export default function FileUpload({ onFileAnalyzed, clientProfile, isAnalyzing,
             dimensions: data.analysisData.dimensions || {},
             processes: data.analysisData.procédés || data.analysisData.procedes || [],
             notes: data.analysisData.notes_importantes || [],
+            customFields: Object.keys(customFields).length > 0 ? customFields : undefined,
           },
         }
 
