@@ -109,7 +109,7 @@ export default function AnalysisResults({ result, onResultUpdate }: AnalysisResu
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-4">
       <div className="text-sm text-gray-500">
         Fichier: {result.fileName} • {result.timestamp.toLocaleString()}
       </div>
@@ -142,6 +142,8 @@ export default function AnalysisResults({ result, onResultUpdate }: AnalysisResu
               renderDimension("Hauteur", result.extractedData.dimensions.hauteur, "dimensions.hauteur")}
             {result.extractedData.dimensions.épaisseur &&
               renderDimension("Épaisseur", result.extractedData.dimensions.épaisseur, "dimensions.épaisseur")}
+            {result.extractedData.dimensions.epaisseur &&
+              renderDimension("Épaisseur", result.extractedData.dimensions.epaisseur, "dimensions.epaisseur")}
           </CardContent>
         </Card>
       )}

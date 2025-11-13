@@ -89,9 +89,9 @@ export default function FilePreview({ file, fileUrl }: FilePreviewProps) {
   }
 
   return (
-    <div className="w-full h-full flex flex-col">
+    <div className="w-full h-full flex flex-col min-h-[600px]">
       {fileType === "pdf" && preview && (
-        <div className="w-full h-full flex-1 min-h-0">
+        <div className="w-full h-full flex-1 min-h-[600px]">
           <iframe
             src={preview}
             className="w-full h-full border-0 rounded-lg"
@@ -101,7 +101,7 @@ export default function FilePreview({ file, fileUrl }: FilePreviewProps) {
       )}
 
       {fileType === "image" && preview && (
-        <div className="w-full h-full flex-1 min-h-0 flex items-center justify-center p-2">
+        <div className="w-full h-full flex-1 min-h-[600px] flex items-center justify-center p-2">
           <img
             src={preview}
             alt="Aperçu du plan"
@@ -111,7 +111,7 @@ export default function FilePreview({ file, fileUrl }: FilePreviewProps) {
       )}
 
       {!fileType && (
-        <div className="w-full h-full flex items-center justify-center text-center text-gray-500">
+        <div className="w-full h-full min-h-[600px] flex items-center justify-center text-center text-gray-500">
           <div>
             <FileText className="h-12 w-12 mx-auto text-gray-400 mb-4" />
             <p>Aucun fichier sélectionné</p>

@@ -130,16 +130,81 @@ export default function CalculationEngine({
           cout_materiau: bestMaterial.costPerUnit,
         }
 
-        // Add custom fields to variables
+        // Add custom fields to variables with support for complex structures
         if (analysisResult.extractedData.customFields) {
           Object.entries(analysisResult.extractedData.customFields).forEach(([key, value]) => {
             if (value && typeof value === "object" && "valeur" in value) {
-              const numValue = Number.parseFloat(value.valeur)
-              variables[key] = isNaN(numValue) ? value.valeur : numValue
+              const fieldValue = value.valeur
+              
+              // Handle array values (e.g., trous as array of objects)
+              if (Array.isArray(fieldValue) && fieldValue.length > 0) {
+                // Extract properties from array items for formula access
+                // Example: trous.quantite, trous.diametre
+                const firstItem = fieldValue[0]
+                if (typeof firstItem === "object") {
+                  // Create a flattened object with aggregated values
+                  const aggregated: Record<string, any> = {}
+                  
+                  // Sum quantities if present
+                  const totalQuantite = fieldValue.reduce((sum, item) => {
+                    if (typeof item === "object" && "quantite" in item) {
+                      return sum + (Number.parseFloat(item.quantite) || 0)
+                    }
+                    return sum
+                  }, 0)
+                  if (totalQuantite > 0) aggregated.quantite = totalQuantite
+                  
+                  // Average diameter if present
+                  const diameters = fieldValue
+                    .map((item) => {
+                      if (typeof item === "object" && "diametre" in item) {
+                        return Number.parseFloat(item.diametre)
+                      }
+                      return null
+                    })
+                    .filter((d) => d !== null && !isNaN(d))
+                  if (diameters.length > 0) {
+                    aggregated.diametre = diameters.reduce((a, b) => a + b, 0) / diameters.length
+                  }
+                  
+                  // Store array length
+                  aggregated.length = fieldValue.length
+                  
+                  // Store the full array
+                  variables[key] = aggregated
+                  
+                  // Also add direct access to aggregated values
+                  Object.entries(aggregated).forEach(([prop, val]) => {
+                    variables[`${key}.${prop}`] = val
+                  })
+                } else {
+                  // Simple array of numbers/strings
+                  variables[key] = fieldValue
+                  variables[`${key}.length`] = fieldValue.length
+                }
+              } else if (typeof fieldValue === "object" && !Array.isArray(fieldValue)) {
+                // Complex object structure
+                variables[key] = fieldValue
+                // Add flattened access to properties
+                Object.entries(fieldValue).forEach(([prop, val]) => {
+                  const numVal = Number.parseFloat(val)
+                  variables[`${key}.${prop}`] = isNaN(numVal) ? val : numVal
+                })
+              } else {
+                // Simple value
+                const numValue = Number.parseFloat(fieldValue)
+                variables[key] = isNaN(numValue) ? fieldValue : numValue
+              }
             } else {
               variables[key] = value
             }
           })
+        }
+        
+        // Add processes array length for formula access
+        if (processes && processes.length > 0) {
+          variables["procedes.length"] = processes.length
+          variables["procedes"] = processes
         }
 
         // Evaluate ALL formulas from the profile
@@ -154,11 +219,23 @@ export default function CalculationEngine({
                 if (!conditionMet) continue
               }
 
-              // Evaluate formula
+              // Evaluate formula with improved variable substitution
               let formulaToEvaluate = formula.formula
-              Object.entries(variables).forEach(([key, value]) => {
+              
+              // Replace variables in formula (handle both simple and nested access like trous.quantite)
+              // Sort by length descending to replace longer keys first (e.g., trous.quantite before trous)
+              const sortedKeys = Object.keys(variables).sort((a, b) => b.length - a.length)
+              
+              sortedKeys.forEach((key) => {
+                const value = variables[key]
                 if (typeof value === "number") {
-                  formulaToEvaluate = formulaToEvaluate.replace(new RegExp(key, "g"), value.toString())
+                  // Escape special regex characters in key
+                  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+                  formulaToEvaluate = formulaToEvaluate.replace(new RegExp(`\\b${escapedKey}\\b`, "g"), value.toString())
+                } else if (typeof value === "string" && !isNaN(Number.parseFloat(value))) {
+                  // Try to convert string numbers
+                  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+                  formulaToEvaluate = formulaToEvaluate.replace(new RegExp(`\\b${escapedKey}\\b`, "g"), value)
                 }
               })
 
@@ -168,9 +245,14 @@ export default function CalculationEngine({
                 formulaId: formula.id,
                 formulaName: formula.name,
                 category: formula.category,
-                result: typeof result === "number" ? result : 0,
+                value: typeof result === "number" ? result : 0,
+                result: typeof result === "number" ? result : 0, // Keep for backward compatibility
                 unit: formula.unit,
-                variables: formula.variables,
+                variables: formula.variables.reduce((acc, varName) => {
+                  acc[varName] = variables[varName] ?? variables[varName.split(".")[0]]
+                  return acc
+                }, {} as Record<string, any>),
+                details: formula.description,
                 formula: formula.formula,
               })
             } catch (error) {
@@ -325,49 +407,71 @@ export default function CalculationEngine({
             </CardContent>
           </Card>
 
-          {/* Display formula results grouped by category */}
+          {/* Display formula results grouped by category - Time operations highlighted */}
           {selectedResult.formulaResults && selectedResult.formulaResults.length > 0 && (
             <>
+              {/* Show time formulas first and prominently */}
               {["time", "cost", "quantity", "optimization", "other"].map((category) => {
                 const categoryResults = selectedResult.formulaResults.filter((r) => r.category === category)
                 if (categoryResults.length === 0) return null
 
-                const categoryColors: Record<string, { bg: string; text: string; border: string }> = {
-                  time: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
-                  cost: { bg: "bg-green-50", text: "text-green-700", border: "border-green-200" },
-                  quantity: { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200" },
-                  optimization: { bg: "bg-orange-50", text: "text-orange-700", border: "border-orange-200" },
-                  other: { bg: "bg-gray-50", text: "text-gray-700", border: "border-gray-200" },
+                const categoryColors: Record<string, { bg: string; text: string; border: string; icon: string }> = {
+                  time: { 
+                    bg: "bg-blue-50", 
+                    text: "text-blue-700", 
+                    border: "border-blue-300",
+                    icon: "⏱️ Temps d'opération"
+                  },
+                  cost: { bg: "bg-green-50", text: "text-green-700", border: "border-green-200", icon: "💰 Coûts" },
+                  quantity: { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200", icon: "📦 Quantités" },
+                  optimization: { bg: "bg-orange-50", text: "text-orange-700", border: "border-orange-200", icon: "⚡ Optimisations" },
+                  other: { bg: "bg-gray-50", text: "text-gray-700", border: "border-gray-200", icon: "📊 Autres" },
                 }
 
                 const colors = categoryColors[category]
 
                 return (
-                  <Card key={category} className={`border-l-4 ${colors.border}`}>
+                  <Card key={category} className={`border-l-4 ${colors.border} ${category === "time" ? "shadow-md" : ""}`}>
                     <CardHeader className={colors.bg}>
-                      <CardTitle className={`${colors.text} text-base capitalize flex items-center gap-2`}>
-                        {category === "time" && "⏱️ Temps"}
-                        {category === "cost" && "💰 Coûts"}
-                        {category === "quantity" && "📦 Quantités"}
-                        {category === "optimization" && "⚡ Optimisations"}
-                        {category === "other" && "📊 Autres"}
-                        <Badge variant="outline">{categoryResults.length}</Badge>
+                      <CardTitle className={`${colors.text} text-base flex items-center gap-2`}>
+                        {colors.icon}
+                        <Badge variant="outline" className={category === "time" ? "bg-blue-100" : ""}>
+                          {categoryResults.length}
+                        </Badge>
+                        {category === "time" && (
+                          <span className="text-xs font-normal ml-auto">
+                            Temps estimés pour les opérations de fabrication
+                          </span>
+                        )}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-4">
                       <div className="space-y-3">
                         {categoryResults.map((formulaResult) => (
-                          <div key={formulaResult.formulaId} className="bg-white border rounded-lg p-3">
+                          <div 
+                            key={formulaResult.formulaId} 
+                            className={`bg-white border rounded-lg p-3 ${category === "time" ? "border-blue-200" : ""}`}
+                          >
                             <div className="flex justify-between items-start mb-2">
-                              <span className="font-medium text-sm">{formulaResult.formulaName}</span>
-                              <span className={`text-lg font-bold ${colors.text}`}>
-                                {formatNumber(formulaResult.result)}
+                              <div className="flex-1">
+                                <span className="font-medium text-sm">{formulaResult.formulaName}</span>
+                                {formulaResult.details && (
+                                  <p className="text-xs text-gray-500 mt-1">{formulaResult.details}</p>
+                                )}
+                              </div>
+                              <span className={`text-lg font-bold ${colors.text} ml-4`}>
+                                {formatNumber(formulaResult.result || (formulaResult.value as number))}
                                 {formulaResult.unit && ` ${formulaResult.unit}`}
                               </span>
                             </div>
-                            <div className="text-xs text-gray-500 font-mono bg-gray-50 p-2 rounded">
-                              {formulaResult.formula}
+                            <div className="text-xs text-gray-500 font-mono bg-gray-50 p-2 rounded mt-2">
+                              <span className="text-gray-400">Formule:</span> {formulaResult.formula}
                             </div>
+                            {formulaResult.variables && Object.keys(formulaResult.variables).length > 0 && (
+                              <div className="text-xs text-gray-400 mt-1">
+                                Variables utilisées: {Object.keys(formulaResult.variables).join(", ")}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>

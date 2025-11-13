@@ -311,19 +311,19 @@ export default function TechnicalDrawingAnalyzer() {
   // ÉTAPE 2 : VALIDATION
   const renderStep2 = () => {
     return (
-      <div className="h-[calc(100vh-280px)] overflow-hidden">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+      <div className="min-h-[calc(100vh-280px)] overflow-y-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-6">
           {/* Colonne gauche : Aperçu du plan (gros) */}
-          <div className="lg:col-span-1 h-full flex flex-col">
-            <Card className="border-[#0078FF]/20 h-full flex flex-col">
+          <div className="lg:col-span-1 flex flex-col">
+            <Card className="border-[#0078FF]/20 flex flex-col">
               <CardHeader className="bg-[#0078FF]/5 flex-shrink-0">
                 <CardTitle className="flex items-center gap-2 text-[#0078FF] text-lg">
                   <Eye className="h-6 w-6" />
                   Aperçu du plan
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-6 p-0 flex-1 overflow-hidden">
-                <div className="h-full">
+              <CardContent className="pt-6 p-0 min-h-[600px]">
+                <div className="h-full w-full min-h-[600px]">
                   <FilePreview file={selectedFile} fileUrl={analysisResult?.fileUrl} />
                 </div>
               </CardContent>
@@ -331,8 +331,8 @@ export default function TechnicalDrawingAnalyzer() {
           </div>
 
           {/* Colonne droite : Données extraites */}
-          <div className="lg:col-span-1 h-full flex flex-col">
-            <Card className="border-[#0078FF]/20 h-full flex flex-col">
+          <div className="lg:col-span-1 flex flex-col">
+            <Card className="border-[#0078FF]/20 flex flex-col">
               <CardHeader className="bg-[#0078FF]/5 flex-shrink-0">
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2 text-[#0078FF] text-lg">
@@ -342,15 +342,15 @@ export default function TechnicalDrawingAnalyzer() {
                   {isValidated && <Badge className="bg-green-100 text-green-800">✓ Validé</Badge>}
                 </div>
               </CardHeader>
-              <CardContent className="pt-6 flex-1 overflow-hidden flex flex-col">
+              <CardContent className="pt-6 flex-1 flex flex-col">
                 {analysisResult ? (
-                  <div className="flex-1 flex flex-col overflow-hidden">
-                    <div className="flex-1 overflow-y-auto pr-2">
+                  <div className="flex flex-col">
+                    <div className="flex-1">
                       <AnalysisResults result={analysisResult} onResultUpdate={setAnalysisResult} />
                     </div>
 
                     {!isValidated && (
-                      <div className="space-y-3 pt-4 border-t flex-shrink-0">
+                      <div className="space-y-3 pt-4 border-t flex-shrink-0 mt-4">
                         <div className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                           <AlertCircle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
                           <div className="text-sm text-yellow-800">
@@ -371,7 +371,7 @@ export default function TechnicalDrawingAnalyzer() {
                     )}
 
                     {isValidated && (
-                      <div className="pt-4 border-t flex-shrink-0">
+                      <div className="pt-4 border-t flex-shrink-0 mt-4">
                         <div className="flex items-center gap-2 p-4 bg-green-50 border border-green-200 rounded-lg">
                           <CheckCircle className="h-6 w-6 text-green-600" />
                           <div>
@@ -454,7 +454,7 @@ export default function TechnicalDrawingAnalyzer() {
                           <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
                           <div className="text-sm text-blue-800">
                             <p className="font-medium">Calculs terminés</p>
-                            <p>Vérifiez les résultats des calculs, puis validez pour continuer</p>
+                            <p>Vérifiez les résultats des calculs, puis validez pour continuer (optionnel)</p>
                           </div>
                         </div>
 
@@ -466,6 +466,18 @@ export default function TechnicalDrawingAnalyzer() {
                           <CheckCircle className="h-5 w-5 mr-2" />
                           Valider les calculs
                         </Button>
+                      </div>
+                    )}
+
+                    {!calculationResult && (
+                      <div className="space-y-3 pt-4 border-t flex-shrink-0 mt-4">
+                        <div className="flex items-start gap-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                          <AlertCircle className="h-5 w-5 text-gray-600 flex-shrink-0 mt-0.5" />
+                          <div className="text-sm text-gray-700">
+                            <p className="font-medium">Calculs optionnels</p>
+                            <p>Les calculs d'optimisation sont facultatifs. Vous pouvez passer à l'étape suivante pour sauvegarder uniquement les données extraites.</p>
+                          </div>
+                        </div>
                       </div>
                     )}
 
@@ -735,13 +747,13 @@ export default function TechnicalDrawingAnalyzer() {
                 onClick={() => {
                   if (currentStep === 2 && isValidated) {
                     setCurrentStep(3)
-                  } else if (currentStep === 3 && calculationsValidated) {
+                  } else if (currentStep === 3) {
+                    // Permettre de passer à l'étape suivante même sans valider les calculs
                     setCurrentStep(4)
                   }
                 }}
                 disabled={
-                  (currentStep === 2 && !isValidated) ||
-                  (currentStep === 3 && !calculationsValidated)
+                  (currentStep === 2 && !isValidated)
                 }
                 className="flex items-center gap-2"
               >

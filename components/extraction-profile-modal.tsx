@@ -279,14 +279,52 @@ export default function ExtractionProfileModal({ isOpen, onClose, profile, onSav
             {/* TAB: Formules */}
             <TabsContent value="formulas" className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-gray-600">
-                  Créez des formules pour calculer automatiquement des valeurs (temps, coûts, quantités)
-                </p>
+                <div>
+                  <p className="text-sm text-gray-600">
+                    Créez des formules pour calculer automatiquement des valeurs (temps, coûts, quantités)
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    💡 <strong>Temps d'opération :</strong> Créez des formules pour estimer les temps de fabrication (ex: temps de perçage basé sur le nombre et la taille des trous)
+                  </p>
+                </div>
                 <Button onClick={addFormula} size="sm">
                   <Plus className="h-4 w-4 mr-2" />
                   Ajouter une formule
                 </Button>
               </div>
+
+              {/* Templates pour formules de temps d'opération */}
+              {formData.formulas && formData.formulas.length === 0 && (
+                <Card className="border-blue-200 bg-blue-50">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm text-blue-800">📋 Templates de formules de temps d'opération</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="text-xs text-blue-700 space-y-2">
+                      <div className="bg-white p-2 rounded border border-blue-200">
+                        <p className="font-medium mb-1">⏱️ Temps de perçage :</p>
+                        <p className="font-mono text-xs">trous.quantite * 2.5</p>
+                        <p className="text-gray-600 mt-1">Calcule le temps en minutes basé sur le nombre de trous (2.5 min/trou)</p>
+                      </div>
+                      <div className="bg-white p-2 rounded border border-blue-200">
+                        <p className="font-medium mb-1">⏱️ Temps de perçage avec taille :</p>
+                        <p className="font-mono text-xs">trous.quantite * (trous.diametre / 10) * 1.5</p>
+                        <p className="text-gray-600 mt-1">Temps ajusté selon le diamètre des trous</p>
+                      </div>
+                      <div className="bg-white p-2 rounded border border-blue-200">
+                        <p className="font-medium mb-1">⏱️ Temps de découpe laser :</p>
+                        <p className="font-mono text-xs">(longueur + largeur) * 2 * 0.1</p>
+                        <p className="text-gray-600 mt-1">Temps basé sur le périmètre de la pièce</p>
+                      </div>
+                      <div className="bg-white p-2 rounded border border-blue-200">
+                        <p className="font-medium mb-1">⏱️ Temps de pliage :</p>
+                        <p className="font-mono text-xs">procedes.length * 3</p>
+                        <p className="text-gray-600 mt-1">3 minutes par opération de pliage</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {formData.formulas && formData.formulas.length > 0 ? (
@@ -352,16 +390,30 @@ export default function ExtractionProfileModal({ isOpen, onClose, profile, onSav
                         </div>
 
                         <div className="space-y-1">
-                          <Label className="text-xs">Formule (syntaxe mathjs)</Label>
+                          <Label className="text-xs">
+                            Formule (syntaxe mathjs){" "}
+                            {formula.category === "time" && (
+                              <span className="text-blue-600">⏱️ Temps d'opération</span>
+                            )}
+                          </Label>
                           <Textarea
                             value={formula.formula}
                             onChange={(e) =>
                               updateFormula(index, { ...formula, formula: e.target.value })
                             }
-                            placeholder="trous.quantite * 2.5"
+                            placeholder={
+                              formula.category === "time"
+                                ? "Ex: trous.quantite * 2.5 (temps de perçage en minutes)"
+                                : "Ex: longueur * largeur * epaisseur"
+                            }
                             rows={2}
                             className="text-sm font-mono"
                           />
+                          {formula.category === "time" && (
+                            <p className="text-xs text-blue-600 mt-1">
+                              💡 Exemples : trous.quantite * 2.5 | (longueur + largeur) * 2 * 0.1 | procedes.length * 3
+                            </p>
+                          )}
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
@@ -393,9 +445,25 @@ export default function ExtractionProfileModal({ isOpen, onClose, profile, onSav
                           </div>
                         </div>
 
-                        <div className="bg-green-50 p-2 rounded text-xs text-green-800">
-                          💡 Utilisez les noms des champs extraits comme variables (ex: trous.quantite, longueur,
-                          largeur)
+                        <div className={`p-2 rounded text-xs ${
+                          formula.category === "time" 
+                            ? "bg-blue-50 text-blue-800" 
+                            : "bg-green-50 text-green-800"
+                        }`}>
+                          {formula.category === "time" ? (
+                            <>
+                              💡 <strong>Formule de temps d'opération :</strong> Utilisez les champs extraits pour calculer les temps de fabrication.
+                              <br />
+                              Exemples de variables : <code className="bg-white px-1 rounded">trous.quantite</code>,{" "}
+                              <code className="bg-white px-1 rounded">trous.diametre</code>,{" "}
+                              <code className="bg-white px-1 rounded">longueur</code>,{" "}
+                              <code className="bg-white px-1 rounded">procedes.length</code>
+                            </>
+                          ) : (
+                            <>
+                              💡 Utilisez les noms des champs extraits comme variables (ex: trous.quantite, longueur, largeur)
+                            </>
+                          )}
                         </div>
                       </CardContent>
                     </Card>

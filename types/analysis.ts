@@ -162,9 +162,11 @@ export interface FormulaResult {
   formulaName: string
   category: string
   value: number | string
+  result?: number // Alias pour value (compatibilité)
   unit?: string
   variables: Record<string, any>
   details?: string
+  formula?: string // Formule utilisée (pour affichage)
 }
 
 export interface CalculationResult {
