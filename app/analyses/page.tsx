@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, FileText, Download, Trash2, Calendar, User, Package } from "lucide-react"
+import { Search, FileText, Download, Trash2, Calendar, User, Package, ChevronDown, ChevronRight, History } from "lucide-react"
 import type { SavedAnalysis, Client } from "@/types/analysis"
 import Link from "next/link"
 
@@ -18,6 +18,7 @@ export default function AnalysesPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [clientFilter, setClientFilter] = useState<string>("all")
   const [isLoading, setIsLoading] = useState(false)
+  const [expandedAnalysis, setExpandedAnalysis] = useState<string | null>(null) // Pour afficher les versions
 
   useEffect(() => {
     loadAnalyses()
@@ -57,20 +58,44 @@ export default function AnalysesPage() {
     }
   }
 
+  // Récupérer toutes les versions d'une analyse
+  const getVersions = (analysis: SavedAnalysis): SavedAnalysis[] => {
+    const parentId = analysis.parentId || analysis.id
+    return analyses
+      .filter((a) => a.id === parentId || a.parentId === parentId)
+      .sort((a, b) => (b.versionNumber || 1) - (a.versionNumber || 1))
+  }
+
+  const toggleVersions = (analysisId: string) => {
+    if (expandedAnalysis === analysisId) {
+      setExpandedAnalysis(null)
+    } else {
+      setExpandedAnalysis(analysisId)
+    }
+  }
+
   const filterAnalyses = () => {
     let filtered = [...analyses]
 
-    // Par défaut, ne montrer que les dernières versions (isLatest: true ou pas de parentId)
-    // Si une analyse a un parentId mais isLatest n'est pas défini, on la considère comme latest
-    filtered = filtered.filter((analysis) => {
-      // Si pas de parentId, c'est une analyse originale
-      if (!analysis.parentId) return true
-      // Si isLatest est true, c'est la dernière version
-      if (analysis.isLatest === true) return true
-      // Si isLatest n'est pas défini, on considère que c'est la dernière version (rétrocompatibilité)
-      if (analysis.isLatest === undefined) return true
-      // Sinon, c'est une ancienne version
-      return false
+    // Grouper les analyses par parent ou par ID si pas de parent
+    const groupedAnalyses = new Map<string, SavedAnalysis[]>()
+
+    filtered.forEach((analysis) => {
+      // Déterminer la clé de groupement (parentId ou l'ID lui-même si pas de parent)
+      const groupKey = analysis.parentId || analysis.id
+
+      if (!groupedAnalyses.has(groupKey)) {
+        groupedAnalyses.set(groupKey, [])
+      }
+      groupedAnalyses.get(groupKey)!.push(analysis)
+    })
+
+    // Pour chaque groupe, ne garder que la version la plus récente (highest versionNumber)
+    filtered = Array.from(groupedAnalyses.values()).map((versions) => {
+      // Trier par numéro de version (décroissant)
+      versions.sort((a, b) => (b.versionNumber || 1) - (a.versionNumber || 1))
+      // Retourner la version la plus récente
+      return versions[0]
     })
 
     // Filtre par recherche
@@ -303,31 +328,55 @@ export default function AnalysesPage() {
               </CardContent>
             </Card>
           ) : (
-            filteredAnalyses.map((analysis) => (
-              <Card key={analysis.id} className="hover:shadow-lg transition-shadow">
-                <CardContent className="pt-6">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 space-y-3">
-                      {/* Titre et statut */}
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <div className="flex flex-col">
-                          <h3 className="text-lg font-semibold text-gray-900">{analysis.title || "Analyse sans titre"}</h3>
-                          {analysis.analysisResult?.extractedData?.reference?.valeur && 
-                           analysis.analysisResult.extractedData.reference.valeur !== "Non spécifié" &&
-                           analysis.analysisResult.extractedData.reference.valeur !== analysis.title && (
-                            <p className="text-sm text-gray-500 mt-1">
-                              Référence: {analysis.analysisResult.extractedData.reference.valeur}
-                            </p>
+            filteredAnalyses.map((analysis) => {
+              const versions = getVersions(analysis)
+              const isExpanded = expandedAnalysis === (analysis.parentId || analysis.id)
+              const hasMultipleVersions = versions.length > 1
+
+              return (
+                <Card key={analysis.id} className="hover:shadow-lg transition-shadow">
+                  <CardContent className="pt-6">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 space-y-3">
+                        {/* Titre et statut */}
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-lg font-semibold text-gray-900">{analysis.title || "Analyse sans titre"}</h3>
+                              {hasMultipleVersions && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => toggleVersions(analysis.parentId || analysis.id)}
+                                  className="h-6 px-2"
+                                >
+                                  {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                  <History className="h-3 w-3 ml-1" />
+                                  <span className="text-xs ml-1">{versions.length} versions</span>
+                                </Button>
+                              )}
+                            </div>
+                            {analysis.analysisResult?.extractedData?.reference?.valeur &&
+                             analysis.analysisResult.extractedData.reference.valeur !== "Non spécifié" &&
+                             analysis.analysisResult.extractedData.reference.valeur !== analysis.title && (
+                              <p className="text-sm text-gray-500 mt-1">
+                                Référence: {analysis.analysisResult.extractedData.reference.valeur}
+                              </p>
+                            )}
+                          </div>
+                          <Badge className={getStatusColor(analysis.status)}>{getStatusLabel(analysis.status)}</Badge>
+                          {analysis.validated && <Badge className="bg-green-100 text-green-800">✓ Validé</Badge>}
+                          {analysis.versionNumber && (
+                            <Badge className="bg-purple-100 text-purple-800">
+                              V{analysis.versionNumber}
+                            </Badge>
+                          )}
+                          {analysis.currentStep && (
+                            <Badge className="bg-blue-100 text-blue-800">
+                              Étape {analysis.currentStep}/4
+                            </Badge>
                           )}
                         </div>
-                        <Badge className={getStatusColor(analysis.status)}>{getStatusLabel(analysis.status)}</Badge>
-                        {analysis.validated && <Badge className="bg-green-100 text-green-800">✓ Validé</Badge>}
-                        {analysis.currentStep && (
-                          <Badge className="bg-blue-100 text-blue-800">
-                            Étape {analysis.currentStep}/4
-                          </Badge>
-                        )}
-                      </div>
 
                       {/* Informations */}
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
@@ -399,9 +448,61 @@ export default function AnalysesPage() {
                       </Button>
                     </div>
                   </div>
+
+                  {/* Liste des versions si expanded */}
+                  {isExpanded && hasMultipleVersions && (
+                    <div className="mt-4 pt-4 border-t">
+                      <h4 className="text-sm font-semibold mb-3 text-gray-700">Historique des versions</h4>
+                      <div className="space-y-2">
+                        {versions.map((version) => (
+                          <div
+                            key={version.id}
+                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                          >
+                            <div className="flex items-center gap-3 flex-1">
+                              <Badge className="bg-purple-100 text-purple-800 font-mono">
+                                V{version.versionNumber || 1}
+                              </Badge>
+                              <Badge className={getStatusColor(version.status)} variant="outline">
+                                {getStatusLabel(version.status)}
+                              </Badge>
+                              {version.validated && (
+                                <Badge className="bg-green-100 text-green-800" variant="outline">
+                                  ✓ Validé
+                                </Badge>
+                              )}
+                              {version.currentStep && (
+                                <span className="text-xs text-gray-600">
+                                  Étape {version.currentStep}/4
+                                </span>
+                              )}
+                              <span className="text-xs text-gray-500">
+                                {new Date(version.updatedAt).toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="flex gap-2">
+                              <Link href={`/?load=${version.id}`}>
+                                <Button variant="outline" size="sm">
+                                  {version.currentStep && version.currentStep < 4 ? "Continuer" : "Voir"}
+                                </Button>
+                              </Link>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteAnalysis(version.id)}
+                              >
+                                <Trash2 className="h-3 w-3 text-red-600" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
-            ))
+              )
+            })
           )}
         </div>
       </div>

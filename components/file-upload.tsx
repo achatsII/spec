@@ -41,41 +41,84 @@ export default function FileUpload({ onFileAnalyzed, clientProfile, isAnalyzing,
 
     try {
       // Générer l'instruction de base
-      let instruction = `Tu es un ingenieur industriel specialise dans l interpretation rigoureuse de plans techniques. Tu dois extraire des informations techniques precises, structurees et exploitables automatiquement a partir d un dessin technique. Extraire toutes les informations necessaires a l estimation de prix ou a la fabrication d une piece. Ces donnees doivent etre normalisees, fiables, structurees, contextualisees et accompagnees d un niveau de confiance et d une justification. Tu dois repondre en JSON structure, avec pour chaque champ: valeur (valeur extraite ou deduite), confiance (un score de 0 a 100), raison (explication de comment tu as obtenu la valeur). Format attendu: {reference_dessin: {valeur: ..., confiance: 95, raison: Present dans le cartouche}, description: {valeur: ..., confiance: 80, raison: Mention dans le cartouche ou texte descriptif}, materiau: {valeur: ..., confiance: 100, raison: Indique dans la zone materiau}, type_piece: {valeur: tube | plat | corniere | plaque | autre, confiance: 90, raison: Deduit de la geometrie ou du texte}, dimensions: {longueur: {valeur: ..., unite: ..., confiance: ..., raison: ...}, largeur: {valeur: ..., unite: ..., confiance: ..., raison: ...}, hauteur: {valeur: ..., unite: ..., confiance: ..., raison: ...}, epaisseur: {valeur: ..., unite: ..., confiance: ..., raison: ...}}, procedes: [{valeur: decoupe laser | pliage | percage | taraudage | filetage | autre, confiance: 90, raison: Indique dans la legende ou infere du plan}], notes_importantes: [{contenu: ..., confiance: 80, raison: Note visible sur le plan technique}]`
+      let instruction = `Tu es un ingenieur industriel specialise dans l interpretation rigoureuse de plans techniques. Tu dois extraire des informations techniques precises, structurees et exploitables automatiquement a partir d un dessin technique. Extraire toutes les informations necessaires a l estimation de prix ou a la fabrication d une piece. Ces donnees doivent etre normalisees, fiables, structurees, contextualisees et accompagnees d un niveau de confiance et d une justification.
+
+IMPORTANT: Tu dois repondre UNIQUEMENT avec un tableau JSON d'objets. Chaque objet doit avoir les cles suivantes:
+- "name": le nom du champ (ex: "reference_dessin", "description", "materiau", "type_piece", "longueur", "largeur", "hauteur", "epaisseur", "procedes", "notes_importantes", etc.)
+- "data_type": le type de donnees ("string", "number", "boolean", "array", "object", etc.)
+- "value": la valeur extraite (peut etre une string, un nombre, un objet, ou un tableau selon le type)
+- "confidence": un score de confiance entre 0 et 100
+- "justification": l'explication de comment la valeur a ete obtenue
+
+Format attendu:
+[
+  {
+    "name": "reference_dessin",
+    "data_type": "string",
+    "value": "...",
+    "confidence": 95,
+    "justification": "Present dans le cartouche"
+  },
+  {
+    "name": "description",
+    "data_type": "string",
+    "value": "...",
+    "confidence": 80,
+    "justification": "Mention dans le cartouche ou texte descriptif"
+  },
+  {
+    "name": "materiau",
+    "data_type": "string",
+    "value": "...",
+    "confidence": 100,
+    "justification": "Indique dans la zone materiau"
+  },
+  {
+    "name": "type_piece",
+    "data_type": "string",
+    "value": "tube | plat | corniere | plaque | autre",
+    "confidence": 90,
+    "justification": "Deduit de la geometrie ou du texte"
+  },
+  {
+    "name": "longueur",
+    "data_type": "number",
+    "value": 100,
+    "confidence": 95,
+    "justification": "Mesure sur le plan"
+  },
+  {
+    "name": "procedes",
+    "data_type": "array",
+    "value": ["decoupe laser", "pliage", "percage"],
+    "confidence": 90,
+    "justification": "Indique dans la legende ou infere du plan"
+  }
+]`
 
       // Ajouter les instructions spécifiques du profil d'extraction si disponible
       if (clientProfile) {
-        // Ajouter la description du profil comme instruction système
-        if (clientProfile.description && clientProfile.description.trim()) {
-          instruction += `\n\nINSTRUCTIONS SPECIFIQUES DU PROFIL D'EXTRACTION "${clientProfile.name}":\n${clientProfile.description.trim()}\n\nCes instructions sont prioritaires et doivent etre suivies precisement. Assure-toi d'extraire toutes les informations mentionnees dans ces instructions, notamment dans les notes_importantes si pertinent.`
+        // Générer automatiquement le prompt du profil avec le format JSON par défaut
+        instruction += `\n\nPROFIL D'EXTRACTION "${clientProfile.name}"\n`
+        instruction += `Analyse le document technique. Extrais les informations suivantes: `
+
+        // Construire la liste des détails de champs
+        const fieldDetails: string[] = []
+        if (clientProfile.customFields && clientProfile.customFields.length > 0) {
+          clientProfile.customFields.forEach((field) => {
+            const fieldInstruction = field.instruction || `Extraire ${field.label || field.name}`
+            fieldDetails.push(`${field.name} (${field.label}): ${fieldInstruction}`)
+          })
+        }
+        
+        if (fieldDetails.length > 0) {
+          instruction += fieldDetails.join(", ")
         }
 
-        // Ajouter les champs personnalisés du profil
-        if (clientProfile.customFields && clientProfile.customFields.length > 0) {
-          instruction += `\n\nCHAMPS PERSONNALISES A EXTRAIRE:\n`
-          clientProfile.customFields.forEach((field) => {
-            const fieldDescription = field.prompt || `Extraire ${field.label || field.name}`
-            instruction += `- ${field.name}: ${fieldDescription}\n`
-          })
-          
-          instruction += `\nCes champs doivent etre inclus dans champs_personnalises avec le format suivant: champs_personnalises: {`
-          const customFieldsPrompts = clientProfile.customFields.map((field) => {
-            const fieldDescription = field.prompt || `Extraire ${field.label || field.name}`
-            if (field.type === "complex" && field.structure) {
-              const properties = field.structure.properties.map((p) => `${p.name}: ...`).join(", ")
-              return `${field.name}: {${properties}, confiance: ..., raison: "${fieldDescription}"}`
-            } else if (field.type === "array") {
-              return `${field.name}: [{valeur: ..., confiance: ..., raison: "${fieldDescription}"}]`
-            } else {
-              return `${field.name}: {valeur: ..., confiance: ..., raison: "${fieldDescription}"}`
-            }
-          })
-          instruction += customFieldsPrompts.join(", ")
-          instruction += `}`
-        }
+        instruction += `\n\nCes champs doivent etre inclus dans le tableau JSON avec le format standard (name, data_type, value, confidence, justification).`
       }
 
-      instruction += `}. Ne jamais inventer d information si elle n est pas visible. Toujours expliquer comment chaque valeur a ete trouvee. Si une unite est implicite, tu peux la deduire mais avec prudence. Utilise ton jugement d expert pour identifier des procedes ou types standards. Tu dois rendre la sortie exploitable automatiquement: pas de texte hors JSON. En cas de doute: si une valeur est manquante ou illisible, utilise valeur: Non specifie avec confiance: 0 et une raison claire.`
+      instruction += `\n\nNe jamais inventer d information si elle n est pas visible. Toujours expliquer comment chaque valeur a ete trouvee. Si une unite est implicite, tu peux la deduire mais avec prudence. Utilise ton jugement d expert pour identifier des procedes ou types standards. Tu dois rendre la sortie exploitable automatiquement: pas de texte hors JSON. En cas de doute: si une valeur est manquante ou illisible, utilise value: "Non specifie" avec confidence: 0 et une justification claire.`
 
       // Ajouter le contexte texte si fourni
       if (contextText && contextText.trim()) {

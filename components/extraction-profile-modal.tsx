@@ -23,7 +23,6 @@ interface ExtractionProfileModalProps {
 export default function ExtractionProfileModal({ isOpen, onClose, profile, onSave }: ExtractionProfileModalProps) {
   const [formData, setFormData] = useState<Partial<ExtractionProfile>>({
     name: "",
-    description: "",
     customFields: [],
     formulas: [],
     compatibleMaterialIds: [],
@@ -35,7 +34,6 @@ export default function ExtractionProfileModal({ isOpen, onClose, profile, onSav
     } else {
       setFormData({
         name: "",
-        description: "",
         customFields: [],
         formulas: [],
         compatibleMaterialIds: [],
@@ -52,7 +50,6 @@ export default function ExtractionProfileModal({ isOpen, onClose, profile, onSav
     const profileData: ExtractionProfile = {
       id: profile?.id || `profile_${Date.now()}`,
       name: formData.name,
-      description: formData.description || "",
       customFields: formData.customFields || [],
       formulas: formData.formulas || [],
       compatibleMaterialIds: formData.compatibleMaterialIds || [],
@@ -71,12 +68,28 @@ export default function ExtractionProfileModal({ isOpen, onClose, profile, onSav
       label: "",
       type: "simple",
       required: false,
-      prompt: "",
+      instruction: "",
     }
     setFormData({
       ...formData,
       customFields: [...(formData.customFields || []), newField],
     })
+  }
+
+  // Fonction pour générer automatiquement un label à partir du nom technique
+  const generateLabel = (name: string): string => {
+    if (!name) return ""
+
+    // Remplacer les underscores et tirets par des espaces
+    const words = name.replace(/[_-]/g, " ").split(" ")
+
+    // Capitaliser chaque mot
+    const capitalizedWords = words.map(word => {
+      if (!word) return ""
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    })
+
+    return capitalizedWords.join(" ")
   }
 
   const updateCustomField = (index: number, field: ExtractableField) => {
@@ -137,19 +150,11 @@ export default function ExtractionProfileModal({ isOpen, onClose, profile, onSav
                 id="name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Ex: Analyse complète pièces métalliques"
+                placeholder="Ex: Détaillé"
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Description du profil d'extraction..."
-                rows={2}
-              />
+              <p className="text-xs text-gray-500">
+                Le profil génère automatiquement un prompt avec le format: &quot;Analyse le document technique. Extrais les informations suivantes: [détails des champs] + Réponds en JSON: un tableau d&apos;objets avec clés name, data_type, value, confidence (0-100), et justification&quot;
+              </p>
             </div>
           </div>
 
@@ -190,10 +195,19 @@ export default function ExtractionProfileModal({ isOpen, onClose, profile, onSav
                             <Label className="text-xs">Nom technique</Label>
                             <Input
                               value={field.name}
-                              onChange={(e) =>
-                                updateCustomField(index, { ...field, name: e.target.value })
-                              }
-                              placeholder="trous"
+                              onChange={(e) => {
+                                const newName = e.target.value
+                                // Générer automatiquement le label si celui-ci est vide ou correspond au label auto-généré de l'ancien nom
+                                const autoLabel = generateLabel(field.name)
+                                const shouldUpdateLabel = !field.label || field.label === autoLabel
+
+                                updateCustomField(index, {
+                                  ...field,
+                                  name: newName,
+                                  label: shouldUpdateLabel ? generateLabel(newName) : field.label
+                                })
+                              }}
+                              placeholder="trous_dimension"
                               className="text-sm"
                             />
                           </div>
@@ -205,7 +219,7 @@ export default function ExtractionProfileModal({ isOpen, onClose, profile, onSav
                               onChange={(e) =>
                                 updateCustomField(index, { ...field, label: e.target.value })
                               }
-                              placeholder="Trous"
+                              placeholder="Trous Dimension"
                               className="text-sm"
                             />
                           </div>
@@ -225,9 +239,9 @@ export default function ExtractionProfileModal({ isOpen, onClose, profile, onSav
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="simple">Simple (texte/nombre)</SelectItem>
-                                <SelectItem value="complex">Complexe (structure)</SelectItem>
-                                <SelectItem value="dimension">Dimension</SelectItem>
-                                <SelectItem value="array">Liste/Array</SelectItem>
+                                <SelectItem value="objet">Objet (structure unique)</SelectItem>
+                                <SelectItem value="liste_objets">Liste d'objets (tableau)</SelectItem>
+                                <SelectItem value="dimension">Dimension (avec unité)</SelectItem>
                               </SelectContent>
                             </Select>
                           </div>
@@ -249,20 +263,45 @@ export default function ExtractionProfileModal({ isOpen, onClose, profile, onSav
                         <div className="space-y-1">
                           <Label className="text-xs">Instruction pour l'IA</Label>
                           <Textarea
-                            value={field.prompt}
+                            value={field.instruction}
                             onChange={(e) =>
-                              updateCustomField(index, { ...field, prompt: e.target.value })
+                              updateCustomField(index, { ...field, instruction: e.target.value })
                             }
-                            placeholder="Ex: Extraire TOUS les trous avec leur quantité, dimension et type (taraudé, percé, etc.)"
+                            placeholder="Ex: Identifier tous les trous par type (taraudé, percé, etc.) avec leur quantité, diamètre et position"
                             rows={2}
                             className="text-sm"
                           />
                         </div>
 
-                        {field.type === "complex" && (
-                          <div className="bg-blue-50 p-3 rounded text-xs text-blue-800">
-                            💡 Pour les champs complexes, l'IA retournera un objet structuré (ex: quantité: 8,
-                            dimension: "M8", type: "fileté")
+                        {(field.type === "objet" || field.type === "liste_objets") && (
+                          <div className="space-y-2">
+                            <Label className="text-xs">Propriétés de l'objet (séparées par virgules)</Label>
+                            <Textarea
+                              value={field.structure?.properties?.join(", ") || ""}
+                              onChange={(e) => {
+                                const rawValue = e.target.value
+
+                                // Split par virgule mais ne pas filter les vides pour permettre la saisie
+                                const properties = rawValue
+                                  .split(",")
+                                  .map(prop => prop.trim())
+
+                                updateCustomField(index, {
+                                  ...field,
+                                  structure: {
+                                    properties: properties,
+                                  },
+                                })
+                              }}
+                              placeholder="type, quantité, diamètre, position"
+                              rows={2}
+                              className="text-sm"
+                            />
+                            <div className="bg-blue-50 p-3 rounded text-xs text-blue-800">
+                              💡 {field.type === "objet"
+                                ? "L'IA retournera un objet avec ces propriétés (ex: {type: 'taraudé', quantité: 8, diamètre: 'M8'})"
+                                : "L'IA retournera un tableau d'objets avec ces propriétés"}
+                            </div>
                           </div>
                         )}
                       </CardContent>

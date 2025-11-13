@@ -57,6 +57,34 @@ export default function TechnicalDrawingAnalyzer() {
   const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null)
   const [parentAnalysisId, setParentAnalysisId] = useState<string | null>(null)
   const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null)
+  const [validatedDataSnapshot, setValidatedDataSnapshot] = useState<string | null>(null) // Snapshot des données au moment de la validation
+  const [isSavingAuto, setIsSavingAuto] = useState(false) // Pour éviter les sauvegardes simultanées
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string | null>(null) // Snapshot de la dernière sauvegarde pour détecter les modifications
+
+  // Fonction pour créer un snapshot de l'état actuel pour détecter les modifications
+  const createCurrentSnapshot = () => {
+    return JSON.stringify({
+      title: analysisTitle,
+      contextText,
+      quantity,
+      extractedData: analysisResult?.extractedData,
+      calculationResult: calculationResult ? {
+        piecesPerBar: calculationResult.piecesPerBar,
+        estimatedCost: calculationResult.estimatedCost,
+        selectedMaterial: calculationResult.selectedMaterial?.id,
+      } : null,
+      validated: isValidated,
+      calculationsValidated,
+      currentStep,
+    })
+  }
+
+  // Fonction pour vérifier si les données ont été modifiées
+  const hasDataChanged = () => {
+    if (!lastSavedSnapshot) return true // Première sauvegarde
+    const currentSnapshot = createCurrentSnapshot()
+    return currentSnapshot !== lastSavedSnapshot
+  }
 
   const handleFileSelected = (file: File) => {
     setSelectedFile(file)
@@ -83,19 +111,15 @@ export default function TechnicalDrawingAnalyzer() {
       }
     }
 
-    // Sauvegarder automatiquement dès que l'analyse est terminée
-    // Utiliser un setTimeout pour s'assurer que les états sont mis à jour
-    // et que client/profil sont disponibles
+    // Sauvegarder automatiquement dès que l'analyse est terminée (V1)
     setTimeout(async () => {
-      // Vérifier à nouveau que tout est disponible avant de sauvegarder
       if (selectedClient && selectedProfile && result) {
-        await autoSaveAnalysis(2, false, false)
+        await autoSaveAnalysis(2, false, false, true) // forceNewVersion = true pour V1
       } else {
         console.log("Sauvegarde différée: attente de client/profil")
-        // Retry après 1 seconde
         setTimeout(async () => {
           if (selectedClient && selectedProfile && result) {
-            await autoSaveAnalysis(2, false, false)
+            await autoSaveAnalysis(2, false, false, true)
           }
         }, 1000)
       }
@@ -121,39 +145,16 @@ export default function TechnicalDrawingAnalyzer() {
     }
 
     setIsValidated(true)
+    // Créer un snapshot des données validées pour détecter les modifications ultérieures
+    setValidatedDataSnapshot(JSON.stringify(analysisResult.extractedData))
     setCurrentStep(3)
-    
-    // Sauvegarder automatiquement après validation avec un délai pour s'assurer que les états sont mis à jour
-    // Utiliser plusieurs tentatives pour s'assurer que la sauvegarde fonctionne même après chargement depuis l'historique
-    const saveAfterValidation = async (attempt = 0) => {
-      if (attempt > 5) {
-        console.error("❌ Impossible de sauvegarder après validation après plusieurs tentatives", {
-          hasAnalysisResult: !!analysisResult,
-          hasClient: !!selectedClient,
-          hasProfile: !!selectedProfile,
-          currentAnalysisId,
-        })
-        return
-      }
-      
-      if (analysisResult && selectedClient && selectedProfile) {
-        console.log("💾 Sauvegarde après validation, tentative:", attempt + 1, {
-          hasAnalysisId: !!currentAnalysisId,
-          analysisId: currentAnalysisId,
-        })
-        await autoSaveAnalysis(3, true, calculationsValidated)
-      } else {
-        // Retry après un court délai
-        console.log("⏳ Retry sauvegarde après validation, tentative:", attempt + 1, {
-          hasAnalysisResult: !!analysisResult,
-          hasClient: !!selectedClient,
-          hasProfile: !!selectedProfile,
-        })
-        setTimeout(() => saveAfterValidation(attempt + 1), 300)
-      }
+
+    // Sauvegarder automatiquement après validation
+    if (selectedClient && selectedProfile) {
+      setTimeout(() => {
+        autoSaveAnalysis(3, true, calculationsValidated)
+      }, 200)
     }
-    
-    setTimeout(() => saveAfterValidation(), 300)
   }
 
   const handleCalculationComplete = (result: CalculationResult) => {
@@ -164,9 +165,13 @@ export default function TechnicalDrawingAnalyzer() {
     if (!calculationResult) return
     setCalculationsValidated(true)
     setCurrentStep(4)
-    
+
     // Sauvegarder automatiquement après validation des calculs
-    await autoSaveAnalysis(4, true, true)
+    if (selectedClient && selectedProfile) {
+      setTimeout(() => {
+        autoSaveAnalysis(4, true, true)
+      }, 200)
+    }
   }
 
   const handleSaveAnalysis = async () => {
@@ -226,242 +231,184 @@ export default function TechnicalDrawingAnalyzer() {
     }
   }
 
-  // Fonction de sauvegarde automatique avec versioning
-  const autoSaveAnalysis = async (step: 1 | 2 | 3 | 4, validated: boolean, calculationsValidated: boolean) => {
+  // Fonction de sauvegarde avec versioning complet
+  const autoSaveAnalysis = async (step: 1 | 2 | 3 | 4, validated: boolean, calculationsValidated: boolean, forceNewVersion = false) => {
+    // Éviter les sauvegardes simultanées
+    if (isSavingAuto) {
+      console.log("⏳ Sauvegarde déjà en cours, ignorée")
+      return
+    }
+
     // Vérifier les conditions minimales pour sauvegarder
     if (!analysisResult) {
       console.log("Sauvegarde automatique ignorée: pas de résultat d'analyse")
       return
     }
 
-    // Si pas de client ou profil, essayer de les récupérer depuis l'analyse chargée
-    let clientToUse = selectedClient
-    let profileToUse = selectedProfile
-    
-    if (!clientToUse || !profileToUse) {
-      console.log("Sauvegarde automatique: client ou profil manquant, tentative de récupération", {
-        hasClient: !!clientToUse,
-        hasProfile: !!profileToUse,
-        hasResult: !!analysisResult,
-        currentAnalysisId
-      })
-      
-      // Si on a un currentAnalysisId, essayer de charger l'analyse pour récupérer les infos client/profil
-      if (currentAnalysisId && !currentAnalysisId.startsWith("analysis_")) {
-        try {
-          const response = await fetch(`/api/analyses/${currentAnalysisId}`)
-          const data = await response.json()
-          if (data.success && data.analysis) {
-            // Créer un client minimal si nécessaire
-            if (!clientToUse && data.analysis.clientId && data.analysis.clientName) {
-              const minimalClient = {
-                id: data.analysis.clientId,
-                name: data.analysis.clientName,
-                createdAt: data.analysis.createdAt instanceof Date ? data.analysis.createdAt : new Date(data.analysis.createdAt),
-                updatedAt: data.analysis.updatedAt instanceof Date ? data.analysis.updatedAt : new Date(data.analysis.updatedAt),
-              }
-              clientToUse = minimalClient
-              setSelectedClient(minimalClient) // Mettre à jour l'état aussi
-            }
-            // Pour le profil, on doit le charger séparément car il nécessite plus de données
-            if (!profileToUse && data.analysis.profileId) {
-              try {
-                const profileResponse = await fetch(`/api/extraction-profiles/${data.analysis.profileId}`)
-                const profileData = await profileResponse.json()
-                if (profileData.success && profileData.profile) {
-                  profileToUse = profileData.profile
-                  setSelectedProfile(profileData.profile) // Mettre à jour l'état aussi
-                }
-              } catch (profileError) {
-                console.error("Erreur lors du chargement du profil:", profileError)
-              }
-            }
-          }
-        } catch (error) {
-          console.error("Erreur lors de la récupération des infos client/profil:", error)
-        }
-      }
-      
-      // Si toujours pas de client ou profil après la tentative, retry après un délai
-      if (!clientToUse || !profileToUse) {
-        setTimeout(async () => {
-          if (selectedClient && selectedProfile && analysisResult) {
-            await autoSaveAnalysis(step, validated, calculationsValidated)
-          }
-        }, 500)
-        return
-      }
+    // Vérifier client et profil (obligatoires)
+    if (!selectedClient || !selectedProfile) {
+      console.log("Sauvegarde automatique ignorée: client ou profil manquant")
+      return
     }
 
+    // Vérifier si les données ont changé (sauf si forceNewVersion)
+    if (!forceNewVersion && !hasDataChanged()) {
+      console.log("💡 Aucune modification détectée, sauvegarde ignorée")
+      return
+    }
+
+    setIsSavingAuto(true)
+
     try {
-      console.log("💾 Sauvegarde automatique en cours...", {
+      console.log("💾 Sauvegarde avec versioning en cours...", {
         step,
         validated,
         calculationsValidated,
         title: analysisTitle,
-        hasCurrentAnalysisId: !!currentAnalysisId,
-        currentAnalysisId
+        hasParentId: !!parentAnalysisId,
+        forceNewVersion
       })
-      
+
       // Déterminer le statut selon l'étape
       let status: "draft" | "analyzed" | "validated" | "completed" = "draft"
       if (step >= 2) status = "analyzed"
       if (validated) status = "validated"
       if (calculationsValidated) status = "completed"
 
-      // Préparer l'analyse pour la sauvegarde
-      // Convertir les dates en ISO strings pour la sérialisation JSON
       const now = new Date().toISOString()
-      
-      // S'assurer que analysisResult a un timestamp en string si c'est un Date
-      const analysisResultToSave = {
+
+      // S'assurer que analysisResult a un timestamp en string pour la sauvegarde
+      const analysisResultToSave: any = {
         ...analysisResult,
-        timestamp: analysisResult.timestamp instanceof Date 
+        timestamp: analysisResult.timestamp instanceof Date
           ? analysisResult.timestamp.toISOString()
-          : analysisResult.timestamp,
+          : (typeof analysisResult.timestamp === 'string'
+              ? analysisResult.timestamp
+              : new Date().toISOString()),
       }
-      
-      // Si on a déjà une analyse (currentAnalysisId existe et n'est pas un ID client), mettre à jour
-      if (currentAnalysisId && !currentAnalysisId.startsWith("analysis_")) {
-        console.log("🔄 Mise à jour de l'analyse existante:", currentAnalysisId)
-        
-        // Charger l'analyse existante pour préserver createdAt et autres métadonnées
-        let existingAnalysis: SavedAnalysis | null = null
+
+      // Déterminer le numéro de version
+      let versionNumber = 1
+      let effectiveParentId = parentAnalysisId
+
+      // Si on a un parentId, récupérer toutes les versions pour calculer le numéro
+      if (parentAnalysisId) {
         try {
-          const getResponse = await fetch(`/api/analyses/${currentAnalysisId}`)
-          const getData = await getResponse.json()
-          if (getData.success && getData.analysis) {
-            existingAnalysis = getData.analysis
+          const versionsResponse = await fetch(`/api/analyses?parentId=${parentAnalysisId}`)
+          const versionsData = await versionsResponse.json()
+          if (versionsData.success && Array.isArray(versionsData.analyses)) {
+            // Trouver le numéro de version le plus élevé
+            const maxVersion = versionsData.analyses.reduce((max, analysis) => {
+              return Math.max(max, analysis.versionNumber || 1)
+            }, 1)
+            versionNumber = maxVersion + 1
           }
         } catch (error) {
-          console.error("Erreur lors de la récupération de l'analyse existante:", error)
+          console.error("Erreur lors de la récupération des versions:", error)
         }
-        
-        const updatedAnalysis: SavedAnalysis = {
-          id: currentAnalysisId,
-          title: analysisTitle || "Analyse sans titre",
-          clientId: clientToUse.id,
-          clientName: clientToUse.name,
-          profileId: profileToUse.id,
-          profileName: profileToUse.name,
-          fileName: analysisResult.fileName,
-          fileUrl: analysisResult.fileUrl,
-          fileType: analysisResult.fileType,
-          analysisResult: analysisResultToSave,
-          calculationResult: calculationResult || null,
-          status: status,
-          validated: validated,
-          contextText: contextText || undefined,
-          quantity: quantity || 1,
-          createdAt: existingAnalysis?.createdAt || new Date(now), // Préserver la date de création originale
-          updatedAt: new Date(now),
-          currentStep: step,
-          parentId: existingAnalysis?.parentId || parentAnalysisId || undefined,
-          versionNumber: existingAnalysis?.versionNumber || 1, // Garder le même numéro de version
-          isLatest: true,
-        }
+      } else if (currentAnalysisId) {
+        // Si on charge depuis l'historique sans parentId, utiliser currentAnalysisId comme parent
+        effectiveParentId = currentAnalysisId
+        versionNumber = 2 // Première modification = V2
+      }
 
-        const response = await fetch(`/api/analyses/${currentAnalysisId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updatedAnalysis),
-        })
-
-        const data = await response.json()
-
-        if (data.success) {
-          console.log("✅ Analyse mise à jour avec succès:", {
-            id: currentAnalysisId,
-            step,
-            status,
-            validated,
-            title: analysisTitle
+      // Marquer l'ancienne version comme non-latest si elle existe
+      if (currentAnalysisId && !currentAnalysisId.startsWith("analysis_")) {
+        try {
+          await fetch(`/api/analyses/${currentAnalysisId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ isLatest: false }),
           })
-          // Pas besoin de mettre à jour currentAnalysisId car c'est la même analyse
+        } catch (error) {
+          console.error("Erreur lors de la mise à jour de l'ancienne version:", error)
+        }
+      }
+
+      // Créer une nouvelle version
+      console.log("➕ Création d'une nouvelle version:", versionNumber)
+
+      const savedAnalysis: SavedAnalysis = {
+        id: `analysis_${Date.now()}`,
+        title: analysisTitle || "Analyse sans titre",
+        clientId: selectedClient.id,
+        clientName: selectedClient.name,
+        profileId: selectedProfile.id,
+        profileName: selectedProfile.name,
+        fileName: analysisResult.fileName,
+        fileUrl: analysisResult.fileUrl,
+        fileType: analysisResult.fileType,
+        analysisResult: analysisResultToSave as AnalysisResult,
+        calculationResult: calculationResult || null,
+        status: status,
+        validated: validated,
+        contextText: contextText || undefined,
+        quantity: quantity || 1,
+        createdAt: new Date(now),
+        updatedAt: new Date(now),
+        currentStep: step,
+        parentId: effectiveParentId || undefined,
+        versionNumber: versionNumber,
+        isLatest: true,
+      }
+
+      const response = await fetch("/api/analyses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(savedAnalysis),
+      })
+
+      const data = await response.json()
+
+      if (data.success && data.id) {
+        // Mettre à jour les IDs pour les prochaines sauvegardes
+        if (!effectiveParentId) {
+          setParentAnalysisId(data.id) // V1 devient le parent
         } else {
-          console.error("❌ Erreur lors de la mise à jour:", data.error)
+          setParentAnalysisId(effectiveParentId) // Garder le parent original
         }
-      } else {
-        // Créer une nouvelle analyse seulement si on n'en a pas déjà une
-        console.log("➕ Création d'une nouvelle analyse")
-        
-        const savedAnalysis: SavedAnalysis = {
-          id: `analysis_${Date.now()}`,
-          title: analysisTitle || "Analyse sans titre",
-          clientId: clientToUse.id,
-          clientName: clientToUse.name,
-          profileId: profileToUse.id,
-          profileName: profileToUse.name,
-          fileName: analysisResult.fileName,
-          fileUrl: analysisResult.fileUrl,
-          fileType: analysisResult.fileType,
-          analysisResult: analysisResultToSave,
-          calculationResult: calculationResult || null,
-          status: status,
-          validated: validated,
-          contextText: contextText || undefined,
-          quantity: quantity || 1,
-          createdAt: new Date(now),
-          updatedAt: new Date(now),
-          currentStep: step,
-          parentId: parentAnalysisId || undefined,
-          versionNumber: 1,
-          isLatest: true,
-        }
+        setCurrentAnalysisId(data.id) // L'ID de la nouvelle version
 
-        const response = await fetch("/api/analyses", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(savedAnalysis),
+        // Mettre à jour le snapshot de la dernière sauvegarde
+        setLastSavedSnapshot(createCurrentSnapshot())
+
+        console.log("✅ Nouvelle version sauvegardée:", {
+          id: data.id,
+          version: versionNumber,
+          parentId: effectiveParentId,
+          step,
+          status,
+          title: analysisTitle
         })
-
-        const data = await response.json()
-
-        if (data.success && data.id) {
-          // Mettre à jour les IDs pour les prochaines sauvegardes
-          if (!parentAnalysisId) {
-            setParentAnalysisId(data.id)
-          }
-          setCurrentAnalysisId(data.id)
-          console.log("✅ Analyse sauvegardée automatiquement:", {
-            id: data.id,
-            step,
-            status,
-            validated,
-            title: analysisTitle,
-            hasAnalysisResult: !!savedAnalysis.analysisResult,
-            hasCalculationResult: !!savedAnalysis.calculationResult,
-            analysisResultKeys: savedAnalysis.analysisResult ? Object.keys(savedAnalysis.analysisResult) : [],
-            hasExtractedData: !!savedAnalysis.analysisResult?.extractedData,
-            hasFileUrl: !!savedAnalysis.fileUrl,
-            hasFileName: !!savedAnalysis.fileName,
-            quantity: savedAnalysis.quantity,
-            clientId: savedAnalysis.clientId,
-            profileId: savedAnalysis.profileId,
-          })
-        }
       }
     } catch (error) {
       console.error("Erreur lors de la sauvegarde automatique:", error)
-      // Ne pas afficher d'erreur à l'utilisateur pour les sauvegardes automatiques
+    } finally {
+      setIsSavingAuto(false)
     }
   }
 
   // Gérer le changement d'étape avec sauvegarde automatique
   const handleStepChange = async (newStep: 1 | 2 | 3 | 4, preserveValidations = false) => {
     const oldStep = currentStep
+
+    // Si on essaie d'avancer à l'étape 3 depuis l'étape 2 sans validation, bloquer
+    if (oldStep === 2 && newStep === 3 && !isValidated) {
+      console.log("⚠️ Impossible d'avancer: les données doivent être validées")
+      return
+    }
+
     setCurrentStep(newStep)
 
     // Si on recule et qu'on ne préserve pas les validations, réinitialiser
-    // MAIS préserver les validations si on revient juste pour voir/modifier les données
     if (newStep < oldStep && !preserveValidations) {
       if (newStep < 2) {
         setIsValidated(false)
         setCalculationsValidated(false)
+        setValidatedDataSnapshot(null)
       } else if (newStep < 3) {
-        // Si on revient à l'étape 2 depuis l'étape 3, préserver la validation
-        // pour que l'utilisateur puisse voir ses modifications
-        // setIsValidated reste true si on était déjà validé
+        // Si on revient à l'étape 2 depuis l'étape 3, ne pas réinitialiser la validation
+        // La validation sera réinitialisée automatiquement si les données sont modifiées
         setCalculationsValidated(false)
       } else if (newStep < 4) {
         setCalculationsValidated(false)
@@ -469,23 +416,15 @@ export default function TechnicalDrawingAnalyzer() {
     }
 
     // Sauvegarder automatiquement lors du changement d'étape
-    // Utiliser les validations actuelles (qui peuvent avoir été restaurées depuis l'historique)
-    // Utiliser un délai pour s'assurer que les états sont mis à jour
-    setTimeout(async () => {
-      if (analysisResult && selectedClient && selectedProfile) {
-        console.log("💾 Sauvegarde lors du changement d'étape:", {
-          from: oldStep,
-          to: newStep,
-          validated: isValidated && newStep >= 2,
-          calculationsValidated: calculationsValidated && newStep >= 3,
-        })
-        await autoSaveAnalysis(
-          newStep, 
-          isValidated && newStep >= 2, 
+    if (analysisResult && selectedClient && selectedProfile) {
+      setTimeout(() => {
+        autoSaveAnalysis(
+          newStep,
+          isValidated && newStep >= 2,
           calculationsValidated && newStep >= 3
         )
-      }
-    }, 200)
+      }, 200)
+    }
   }
 
   const loadAnalysis = async (analysisId: string) => {
@@ -633,7 +572,13 @@ export default function TechnicalDrawingAnalyzer() {
       
       // Restaurer les validations exactement comme elles étaient sauvegardées
       // Si l'analyse a le statut "validated" ou "completed", les données étaient validées
-      setIsValidated(analysis.validated || analysis.status === "validated" || analysis.status === "completed")
+      const wasValidated = analysis.validated || analysis.status === "validated" || analysis.status === "completed"
+      setIsValidated(wasValidated)
+      
+      // Si l'analyse était validée, créer un snapshot des données validées
+      if (wasValidated && analysis.analysisResult) {
+        setValidatedDataSnapshot(JSON.stringify(analysis.analysisResult.extractedData))
+      }
       
       // Si l'analyse a le statut "completed", les calculs étaient validés
       setCalculationsValidated(analysis.status === "completed")
@@ -663,8 +608,15 @@ export default function TechnicalDrawingAnalyzer() {
         }
       }
 
+      // Initialiser le snapshot de la dernière sauvegarde
+      // Attendre que tous les états soient mis à jour
+      setTimeout(() => {
+        setLastSavedSnapshot(createCurrentSnapshot())
+      }, 500)
+
       console.log("✅ Analyse chargée depuis l'historique:", {
         id: analysis.id,
+        version: analysis.versionNumber,
         step: savedStep,
         validated: analysis.validated,
         fileUrl: analysis.fileUrl,
@@ -688,36 +640,51 @@ export default function TechnicalDrawingAnalyzer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Sauvegarder automatiquement quand l'analyse est terminée et que client/profil sont disponibles
+  // Sauvegarder automatiquement après l'analyse initiale
   useEffect(() => {
     if (analysisResult && selectedClient && selectedProfile && currentStep === 2 && !currentAnalysisId) {
-      // Sauvegarder immédiatement après l'analyse complète
-      console.log("✅ Auto-sauvegarde déclenchée après analyse complète", {
-        hasResult: !!analysisResult,
-        hasClient: !!selectedClient,
-        hasProfile: !!selectedProfile,
-        step: currentStep
-      })
-      
-      // Utiliser un petit délai pour s'assurer que tous les états sont bien mis à jour
+      console.log("✅ Auto-sauvegarde déclenchée après analyse complète")
+
       const timeout = setTimeout(() => {
         autoSaveAnalysis(currentStep, isValidated, calculationsValidated)
       }, 300)
-      
+
       return () => clearTimeout(timeout)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysisResult, selectedClient, selectedProfile, currentStep, currentAnalysisId])
 
-  // Sauvegarder automatiquement quand les données extraites sont modifiées (avec debounce)
+  // Détecter les modifications des données extraites et réinitialiser la validation si nécessaire
   useEffect(() => {
-    // Ne sauvegarder que si on a une analyse chargée (nouvelle ou depuis l'historique)
-    if (analysisResult && selectedClient && selectedProfile && currentStep >= 2) {
-      // Si on n'a pas encore d'ID d'analyse, ne pas sauvegarder (attendre la première sauvegarde)
-      if (!currentAnalysisId) {
-        return
-      }
+    // Si on est à l'étape 2 ou 3 et que les données ont été validées
+    if (analysisResult && isValidated && validatedDataSnapshot && (currentStep === 2 || currentStep === 3)) {
+      const currentDataSnapshot = JSON.stringify(analysisResult.extractedData)
 
+      // Si les données ont changé depuis la validation, réinitialiser la validation
+      if (currentDataSnapshot !== validatedDataSnapshot) {
+        console.log("⚠️ Données modifiées après validation, réinitialisation de la validation")
+        setIsValidated(false)
+        setValidatedDataSnapshot(null)
+        // Si on était à l'étape 3, revenir à l'étape 2 pour forcer la re-validation
+        if (currentStep === 3) {
+          setCurrentStep(2)
+        }
+
+        // Sauvegarder immédiatement après réinitialisation de la validation
+        setTimeout(() => {
+          if (selectedClient && selectedProfile && analysisResult) {
+            autoSaveAnalysis(2, false, false)
+          }
+        }, 100)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysisResult?.extractedData])
+
+  // Sauvegarder automatiquement quand les données sont modifiées (avec debounce)
+  useEffect(() => {
+    // Ne sauvegarder que si on a déjà une analyse sauvegardée
+    if (analysisResult && selectedClient && selectedProfile && currentStep >= 2 && currentAnalysisId) {
       // Annuler le timeout précédent
       if (saveTimeout) {
         clearTimeout(saveTimeout)
@@ -725,26 +692,16 @@ export default function TechnicalDrawingAnalyzer() {
 
       // Créer un nouveau timeout pour sauvegarder après 2 secondes d'inactivité
       const timeout = setTimeout(() => {
-        console.log("💾 Auto-sauvegarde après modification des données extraites", {
-          step: currentStep,
-          validated: isValidated,
-          calculationsValidated,
-          hasAnalysisId: !!currentAnalysisId
-        })
+        console.log("💾 Auto-sauvegarde après modification des données (debounce 2s)")
         autoSaveAnalysis(currentStep, isValidated, calculationsValidated)
       }, 2000)
 
       setSaveTimeout(timeout)
 
-      // Cleanup
-      return () => {
-        if (timeout) {
-          clearTimeout(timeout)
-        }
-      }
+      return () => clearTimeout(timeout)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analysisResult?.extractedData, currentStep, isValidated, calculationsValidated, currentAnalysisId])
+  }, [analysisResult?.extractedData, analysisTitle, contextText, quantity, currentStep, isValidated, calculationsValidated, currentAnalysisId])
 
   const resetForm = () => {
     // Nettoyer le timeout de sauvegarde
@@ -914,7 +871,7 @@ export default function TechnicalDrawingAnalyzer() {
               </CardHeader>
               <CardContent className="pt-6 p-0 min-h-[600px]">
                 <div className="h-full w-full min-h-[600px]">
-                  <FilePreview file={selectedFile} fileUrl={analysisResult?.fileUrl} />
+                  <FilePreview file={selectedFile} fileUrl={analysisResult?.fileUrl} enableZoom={true} />
                 </div>
               </CardContent>
             </Card>

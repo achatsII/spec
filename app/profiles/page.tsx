@@ -169,10 +169,6 @@ export default function ProfilesPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {profile.description && (
-                    <p className="text-sm text-gray-600 line-clamp-2">{profile.description}</p>
-                  )}
-
                   <div className="flex gap-2 flex-wrap">
                     <Badge variant="outline" className="text-xs">
                       {profile.customFields.length} champ{profile.customFields.length !== 1 ? "s" : ""} personnalisé

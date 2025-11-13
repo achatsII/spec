@@ -12,6 +12,141 @@ interface AgentTrace {
   duration: number
 }
 
+// Fonction pour convertir le format tableau d'objets en format objet existant
+function convertArrayFormatToObjectFormat(arrayData: any[]): any {
+  const result: any = {
+    dimensions: {},
+    procédés: [],
+    notes_importantes: [],
+    champs_personnalises: {},
+  }
+
+  arrayData.forEach((item) => {
+    const { name, data_type, value, confidence, justification } = item
+
+    // Mapper les noms de champs
+    switch (name) {
+      case "reference_dessin":
+      case "référence_dessin":
+        result.référence_dessin = {
+          valeur: value || "Non spécifié",
+          confiance: confidence || 0,
+          raison: justification || "Non trouvé",
+        }
+        break
+      case "description":
+        result.description = {
+          valeur: value || "Non spécifié",
+          confiance: confidence || 0,
+          raison: justification || "Non trouvé",
+        }
+        break
+      case "materiau":
+      case "matériau":
+        result.matériau = {
+          valeur: value || "Non spécifié",
+          confiance: confidence || 0,
+          raison: justification || "Non trouvé",
+        }
+        break
+      case "type_piece":
+      case "type_pièce":
+        result.type_pièce = {
+          valeur: value || "autre",
+          confiance: confidence || 0,
+          raison: justification || "Non trouvé",
+        }
+        break
+      case "longueur":
+      case "largeur":
+      case "hauteur":
+      case "epaisseur":
+      case "épaisseur":
+        // Gérer les dimensions qui peuvent être des objets avec unité ou des valeurs simples
+        if (typeof value === "object" && value !== null) {
+          result.dimensions[name] = {
+            valeur: value.valeur || value.value || 0,
+            unite: value.unite || value.unit || value.unity || "mm",
+            confiance: value.confidence || confidence || 0,
+            raison: value.raison || value.justification || justification || "Non trouvé",
+          }
+        } else {
+          result.dimensions[name] = {
+            valeur: value || 0,
+            unite: item.unit || item.unite || "mm",
+            confiance: confidence || 0,
+            raison: justification || "Non trouvé",
+          }
+        }
+        break
+      case "procedes":
+      case "procédés":
+        if (Array.isArray(value)) {
+          result.procédés = value.map((v: any) => ({
+            valeur: typeof v === "string" ? v : v.valeur || v,
+            confiance: v.confidence || confidence || 0,
+            raison: v.raison || v.justification || justification || "Non trouvé",
+          }))
+        } else {
+          result.procédés.push({
+            valeur: value || "Non spécifié",
+            confiance: confidence || 0,
+            raison: justification || "Non trouvé",
+          })
+        }
+        break
+      case "notes_importantes":
+        if (Array.isArray(value)) {
+          result.notes_importantes = value.map((v: any) => ({
+            contenu: typeof v === "string" ? v : v.contenu || v.valeur || v,
+            confiance: v.confidence || confidence || 0,
+            raison: v.raison || v.justification || justification || "Non trouvé",
+          }))
+        } else {
+          result.notes_importantes.push({
+            contenu: value || "Non spécifié",
+            confiance: confidence || 0,
+            raison: justification || "Non trouvé",
+          })
+        }
+        break
+      case "dimensions":
+        // Si dimensions est un objet dans le tableau, extraire ses propriétés
+        if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+          Object.keys(value).forEach((dimName) => {
+            const dimValue = value[dimName]
+            if (typeof dimValue === "object" && dimValue !== null) {
+              result.dimensions[dimName] = {
+                valeur: dimValue.valeur || dimValue.value || 0,
+                unite: dimValue.unite || dimValue.unit || dimValue.unity || "mm",
+                confiance: dimValue.confidence || confidence || 0,
+                raison: dimValue.raison || dimValue.justification || justification || "Non trouvé",
+              }
+            } else {
+              result.dimensions[dimName] = {
+                valeur: dimValue || 0,
+                unite: "mm",
+                confiance: confidence || 0,
+                raison: justification || "Non trouvé",
+              }
+            }
+          })
+        }
+        break
+      default:
+        // Champs personnalisés
+        result.champs_personnalises[name] = {
+          valeur: value || "Non spécifié",
+          confiance: confidence || 0,
+          raison: justification || "Non trouvé",
+        }
+        break
+    }
+  })
+
+  return result
+}
+
 // Fonction helper pour appeler l'API Gemini via Gateway avec retry
 async function callGeminiAgent(
   file: File,
@@ -124,37 +259,39 @@ async function callGeminiAgent(
         }
       }
 
-      // Si le texte commence par du texte non-JSON, chercher le premier {
-      if (!cleanedResponse.startsWith("{")) {
-        const firstBrace = cleanedResponse.indexOf("{")
+      // Si le texte commence par du texte non-JSON, chercher le premier { ou [
+      if (!cleanedResponse.startsWith("{") && !cleanedResponse.startsWith("[")) {
+        const firstBrace = Math.max(
+          cleanedResponse.indexOf("{"),
+          cleanedResponse.indexOf("[")
+        )
         if (firstBrace > 0) {
           cleanedResponse = cleanedResponse.substring(firstBrace)
         }
       }
 
-      // Si le texte se termine par du texte non-JSON, chercher le dernier }
-      if (!cleanedResponse.endsWith("}")) {
-        const lastBrace = cleanedResponse.lastIndexOf("}")
+      // Si le texte se termine par du texte non-JSON, chercher le dernier } ou ]
+      if (!cleanedResponse.endsWith("}") && !cleanedResponse.endsWith("]")) {
+        const lastBrace = Math.max(
+          cleanedResponse.lastIndexOf("}"),
+          cleanedResponse.lastIndexOf("]")
+        )
         if (lastBrace > 0) {
           cleanedResponse = cleanedResponse.substring(0, lastBrace + 1)
         }
       }
 
       parsedData = JSON.parse(cleanedResponse)
-      console.log(`[${agentName}] JSON parsé avec succès`)
+      const isArray = Array.isArray(parsedData)
+      console.log(`[${agentName}] JSON parsé avec succès (format: ${isArray ? "tableau" : "objet"})`)
+      if (isArray) {
+        console.log(`[${agentName}] Nombre d'éléments dans le tableau: ${parsedData.length}`)
+      }
     } catch (parseError) {
       console.error(`[${agentName}] Erreur parsing JSON:`, parseError)
       console.error(`[${agentName}] Contenu reçu (premiers 1000 chars):`, analyzeData.results?.[0]?.analysis?.substring(0, 1000) || "N/A")
-      parsedData = {
-        référence_dessin: { valeur: "Non spécifié", confiance: 0, raison: "Erreur de parsing" },
-        description: { valeur: "Non spécifié", confiance: 0, raison: "Erreur de parsing" },
-        matériau: { valeur: "Non spécifié", confiance: 0, raison: "Erreur de parsing" },
-        type_pièce: { valeur: "autre", confiance: 0, raison: "Erreur de parsing" },
-        dimensions: {},
-        procédés: [],
-        notes_importantes: [],
-        champs_personnalises: {},
-      }
+      // Retourner un tableau vide en cas d'erreur pour maintenir la cohérence du format
+      parsedData = []
     }
 
     const trace: AgentTrace = {
@@ -229,7 +366,14 @@ TA MISSION:
 4. Completer les informations manquantes si visibles sur le plan
 5. Augmenter la precision des valeurs extraites
 
-Reponds dans le meme format JSON que l'agent principal, mais avec des corrections et ameliorations. Si tu confirmes une valeur, augmente sa confiance. Si tu trouves une erreur, corrige-la et explique pourquoi dans la raison.`
+IMPORTANT: Reponds UNIQUEMENT avec un tableau JSON d'objets dans le meme format que l'agent principal. Chaque objet doit avoir les cles suivantes:
+- "name": le nom du champ
+- "data_type": le type de donnees ("string", "number", "boolean", "array", "object", etc.)
+- "value": la valeur extraite
+- "confidence": un score de confiance entre 0 et 100
+- "justification": l'explication de comment la valeur a ete obtenue
+
+Si tu confirmes une valeur, augmente sa confiance. Si tu trouves une erreur, corrige-la et explique pourquoi dans la justification.`
 
     const { data: verifierData, trace: verifierTrace, fileUrl: verifierFileUrl } = await callGeminiAgent(
       file,
@@ -243,7 +387,7 @@ Reponds dans le meme format JSON que l'agent principal, mais avec des correction
     // ============================================
     const compilerPrompt = `Tu es un agent compilateur final charge de synthetiser les resultats de plusieurs agents d'analyse.
 
-Tu as recu deux analyses du meme plan technique:
+Tu as recu deux analyses du meme plan technique au format tableau JSON:
 
 ANALYSE 1 (Agent Principal):
 ${JSON.stringify(principalData, null, 2)}
@@ -255,18 +399,47 @@ TA MISSION:
 1. Synthetiser les deux analyses pour produire le JSON final le plus precis possible
 2. Pour chaque champ, choisir la valeur la plus fiable (confiance la plus elevee)
 3. Si les deux agents sont d'accord, augmenter la confiance
-4. Si les agents divergent, choisir la valeur la plus logique et documenter dans la raison
+4. Si les agents divergent, choisir la valeur la plus logique et documenter dans la justification
 5. Combiner les informations complementaires des deux analyses
 6. S'assurer que tous les champs requis sont presents
 
-Reponds UNIQUEMENT avec le JSON final synthetise, sans texte supplementaire. Le format doit etre identique a celui des analyses individuelles.`
+IMPORTANT: Reponds UNIQUEMENT avec un tableau JSON d'objets dans le meme format. Chaque objet doit avoir les cles suivantes:
+- "name": le nom du champ (ex: "reference_dessin", "description", "materiau", "type_piece", etc.)
+- "data_type": le type de donnees ("string", "number", "boolean", "array", "object", etc.)
+- "value": la valeur extraite
+- "confidence": un score de confiance entre 0 et 100
+- "justification": l'explication de comment la valeur a ete obtenue
 
-    const { data: compiledData, trace: compilerTrace, fileUrl: compilerFileUrl } = await callGeminiAgent(
+Reponds UNIQUEMENT avec le JSON, sans texte supplementaire.`
+
+    const { data: compiledDataRaw, trace: compilerTrace, fileUrl: compilerFileUrl } = await callGeminiAgent(
       file,
       compilerPrompt,
       "Agent Compilateur",
     )
     allTraces.push(compilerTrace)
+
+    // Convertir le format tableau en format objet si nécessaire
+    let compiledData = compiledDataRaw
+    if (Array.isArray(compiledDataRaw)) {
+      console.log("[Agent Compilateur] Conversion du format tableau en format objet")
+      if (compiledDataRaw.length === 0) {
+        console.warn("[Agent Compilateur] Tableau vide reçu, utilisation de valeurs par défaut")
+        compiledData = {
+          référence_dessin: { valeur: "Non spécifié", confiance: 0, raison: "Aucune donnée extraite" },
+          description: { valeur: "Non spécifié", confiance: 0, raison: "Aucune donnée extraite" },
+          matériau: { valeur: "Non spécifié", confiance: 0, raison: "Aucune donnée extraite" },
+          type_pièce: { valeur: "autre", confiance: 0, raison: "Aucune donnée extraite" },
+          dimensions: {},
+          procédés: [],
+          notes_importantes: [],
+          champs_personnalises: {},
+        }
+      } else {
+        compiledData = convertArrayFormatToObjectFormat(compiledDataRaw)
+        console.log("[Agent Compilateur] Données converties:", JSON.stringify(compiledData, null, 2))
+      }
+    }
 
     // Utiliser le fileUrl du premier agent (ils sont tous identiques)
     const fileUrl = principalFileUrl || verifierFileUrl || compilerFileUrl

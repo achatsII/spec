@@ -98,22 +98,18 @@ export interface ExtractableField {
   id: string
   name: string               // Ex: "trous", "plis", "soudures"
   label: string             // Label d'affichage
-  type: "simple" | "complex" | "dimension" | "array"
+  type: "simple" | "objet" | "liste_objets" | "dimension"
+  instruction: string       // Instruction spécifique pour l'IA (remplace "prompt")
   dataType?: "string" | "number" | "boolean" // Type de données attendu
 
-  // Pour les champs complexes (ex: trous)
+  // Pour les champs de type "objet" ou "liste_objets"
   structure?: {
-    properties: Array<{
-      name: string          // Ex: "quantité", "dimension", "type"
-      type: string         // "string", "number"
-      required: boolean
-    }>
+    properties: string[]    // Liste simple des noms de propriétés: ["type", "quantité", "diamètre", "position"]
   }
 
   required: boolean
-  unit?: string            // Unité si applicable
-  prompt: string          // Instruction spécifique pour l'IA
-  examples?: string[]     // Exemples pour l'IA
+  unit?: string            // Unité si applicable (pour dimensions)
+  examples?: string[]     // Exemples pour l'IA (optionnel)
 }
 
 // ============================================
@@ -138,7 +134,7 @@ export interface CustomFormula {
 export interface ExtractionProfile {
   id: string
   name: string
-  description?: string
+  // Plus de champ description - le profil génère automatiquement le prompt
 
   // Champs à extraire (en plus des champs standards)
   customFields: ExtractableField[]
