@@ -123,66 +123,11 @@ export default function AnalysisResults({ result, onResultUpdate }: AnalysisResu
     )
   }
 
-  // Fonction pour collecter tous les champs extraits (standards + dimensions + personnalisés)
+  // Fonction pour collecter uniquement les champs extractables définis dans le profil d'extraction
   const getAllExtractedFields = () => {
     const fields: Array<{ name: string; label: string; data: any; path: string }> = []
 
-    // Champs standards
-    if (result.extractedData.reference) {
-      fields.push({
-        name: "reference",
-        label: "Référence",
-        data: result.extractedData.reference,
-        path: "reference",
-      })
-    }
-    if (result.extractedData.description) {
-      fields.push({
-        name: "description",
-        label: "Description",
-        data: result.extractedData.description,
-        path: "description",
-      })
-    }
-    if (result.extractedData.material) {
-      fields.push({
-        name: "material",
-        label: "Matériau",
-        data: result.extractedData.material,
-        path: "material",
-      })
-    }
-    if (result.extractedData.pieceType) {
-      fields.push({
-        name: "pieceType",
-        label: "Type de pièce",
-        data: result.extractedData.pieceType,
-        path: "pieceType",
-      })
-    }
-
-    // Dimensions
-    if (result.extractedData.dimensions) {
-      const dimensionLabels: Record<string, string> = {
-        longueur: "Longueur",
-        largeur: "Largeur",
-        hauteur: "Hauteur",
-        épaisseur: "Épaisseur",
-        epaisseur: "Épaisseur",
-      }
-      Object.entries(result.extractedData.dimensions).forEach(([key, dimension]: [string, any]) => {
-        if (dimension && dimension.valeur) {
-          fields.push({
-            name: key,
-            label: dimensionLabels[key] || key,
-            data: dimension,
-            path: `dimensions.${key}`,
-          })
-        }
-      })
-    }
-
-    // Champs personnalisés
+    // Uniquement les champs personnalisés (définis dans le profil d'extraction)
     if (result.extractedData.customFields) {
       Object.entries(result.extractedData.customFields).forEach(([fieldName, fieldData]: [string, any]) => {
         fields.push({

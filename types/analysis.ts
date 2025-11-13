@@ -35,11 +35,6 @@ export interface ExtractedData {
     épaisseur?: DimensionField
   }
   processes: ExtractedField[]
-  notes: Array<{
-    contenu: string
-    confiance: number
-    raison: string
-  }>
 
   // Champs personnalisés (définis par les profils d'extraction)
   customFields?: Record<string, ExtractedField | ComplexField>

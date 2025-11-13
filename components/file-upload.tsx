@@ -40,83 +40,65 @@ export default function FileUpload({ onFileAnalyzed, clientProfile, isAnalyzing,
     setError(null)
 
     try {
-      // Générer l'instruction de base
-      let instruction = `Tu es un ingenieur industriel specialise dans l interpretation rigoureuse de plans techniques. Tu dois extraire des informations techniques precises, structurees et exploitables automatiquement a partir d un dessin technique. Extraire toutes les informations necessaires a l estimation de prix ou a la fabrication d une piece. Ces donnees doivent etre normalisees, fiables, structurees, contextualisees et accompagnees d un niveau de confiance et d une justification.
+      // Générer l'instruction de base - uniquement si un profil d'extraction est défini
+      if (!clientProfile || !clientProfile.customFields || clientProfile.customFields.length === 0) {
+        throw new Error("Un profil d'extraction avec au moins un champ extractable est requis")
+      }
 
-IMPORTANT: Tu dois repondre UNIQUEMENT avec un tableau JSON d'objets. Chaque objet doit avoir les cles suivantes:
-- "name": le nom du champ (ex: "reference_dessin", "description", "materiau", "type_piece", "longueur", "largeur", "hauteur", "epaisseur", "procedes", "notes_importantes", etc.)
+      let instruction = `Tu es un ingenieur industriel specialise dans l interpretation rigoureuse de plans techniques. Tu dois extraire des informations techniques precises, structurees et exploitables automatiquement a partir d un dessin technique. Ces donnees doivent etre normalisees, fiables, structurees, contextualisees et accompagnees d un niveau de confiance et d une justification.
+
+PROFIL D'EXTRACTION "${clientProfile.name}"
+Analyse le document technique. Extrais les informations suivantes: `
+
+      // Construire la liste des détails de champs du profil
+      const fieldDetails: string[] = []
+      const fieldExamples: any[] = []
+      
+      clientProfile.customFields.forEach((field) => {
+        const fieldInstruction = field.instruction || `Extraire ${field.label || field.name}`
+        fieldDetails.push(`${field.name} (${field.label}): ${fieldInstruction}`)
+        
+        // Créer un exemple pour chaque champ selon son type
+        let exampleValue: any = "..."
+        let exampleDataType = "string"
+        
+        if (field.type === "dimension") {
+          exampleValue = 100
+          exampleDataType = "number"
+        } else if (field.type === "objet" && field.structure) {
+          const objExample: any = {}
+          field.structure.properties.forEach((prop: string) => {
+            objExample[prop] = "..."
+          })
+          exampleValue = objExample
+          exampleDataType = "object"
+        } else if (field.type === "liste_objets" && field.structure) {
+          exampleValue = [{ [field.structure.properties[0]]: "..." }]
+          exampleDataType = "array"
+        }
+        
+        fieldExamples.push({
+          name: field.name,
+          data_type: exampleDataType,
+          value: exampleValue,
+          confidence: 95,
+          justification: fieldInstruction
+        })
+      })
+      
+      instruction += fieldDetails.join(", ")
+
+      instruction += `\n\nIMPORTANT: Tu dois repondre UNIQUEMENT avec un tableau JSON d'objets. Chaque objet doit avoir les cles suivantes:
+- "name": le nom exact du champ (doit correspondre exactement aux noms des champs ci-dessus)
 - "data_type": le type de donnees ("string", "number", "boolean", "array", "object", etc.)
-- "value": la valeur extraite (peut etre une string, un nombre, un objet, ou un tableau selon le type)
+- "value": la valeur extraite (peut etre une string, un nombre, un objet, ou un tableau selon le type du champ)
 - "confidence": un score de confiance entre 0 et 100
 - "justification": l'explication de comment la valeur a ete obtenue
 
-Format attendu:
-[
-  {
-    "name": "reference_dessin",
-    "data_type": "string",
-    "value": "...",
-    "confidence": 95,
-    "justification": "Present dans le cartouche"
-  },
-  {
-    "name": "description",
-    "data_type": "string",
-    "value": "...",
-    "confidence": 80,
-    "justification": "Mention dans le cartouche ou texte descriptif"
-  },
-  {
-    "name": "materiau",
-    "data_type": "string",
-    "value": "...",
-    "confidence": 100,
-    "justification": "Indique dans la zone materiau"
-  },
-  {
-    "name": "type_piece",
-    "data_type": "string",
-    "value": "tube | plat | corniere | plaque | autre",
-    "confidence": 90,
-    "justification": "Deduit de la geometrie ou du texte"
-  },
-  {
-    "name": "longueur",
-    "data_type": "number",
-    "value": 100,
-    "confidence": 95,
-    "justification": "Mesure sur le plan"
-  },
-  {
-    "name": "procedes",
-    "data_type": "array",
-    "value": ["decoupe laser", "pliage", "percage"],
-    "confidence": 90,
-    "justification": "Indique dans la legende ou infere du plan"
-  }
-]`
+Format attendu (exemples pour les champs a extraire):
+${JSON.stringify(fieldExamples, null, 2)}
 
-      // Ajouter les instructions spécifiques du profil d'extraction si disponible
-      if (clientProfile) {
-        // Générer automatiquement le prompt du profil avec le format JSON par défaut
-        instruction += `\n\nPROFIL D'EXTRACTION "${clientProfile.name}"\n`
-        instruction += `Analyse le document technique. Extrais les informations suivantes: `
-
-        // Construire la liste des détails de champs
-        const fieldDetails: string[] = []
-        if (clientProfile.customFields && clientProfile.customFields.length > 0) {
-          clientProfile.customFields.forEach((field) => {
-            const fieldInstruction = field.instruction || `Extraire ${field.label || field.name}`
-            fieldDetails.push(`${field.name} (${field.label}): ${fieldInstruction}`)
-          })
-        }
-        
-        if (fieldDetails.length > 0) {
-          instruction += fieldDetails.join(", ")
-        }
-
-        instruction += `\n\nCes champs doivent etre inclus dans le tableau JSON avec le format standard (name, data_type, value, confidence, justification).`
-      }
+IMPORTANT: Tu dois extraire UNIQUEMENT les champs listes ci-dessus. N'extrais aucun autre champ qui n'est pas dans cette liste.`
 
       instruction += `\n\nNe jamais inventer d information si elle n est pas visible. Toujours expliquer comment chaque valeur a ete trouvee. Si une unite est implicite, tu peux la deduire mais avec prudence. Utilise ton jugement d expert pour identifier des procedes ou types standards. Tu dois rendre la sortie exploitable automatiquement: pas de texte hors JSON. En cas de doute: si une valeur est manquante ou illisible, utilise value: "Non specifie" avec confidence: 0 et une justification claire.`
 
@@ -171,24 +153,14 @@ Format attendu:
           fileUrl: data.fileUrl, // URL du fichier pour le preview
           fileType: data.fileType || selectedFile.type, // Type du fichier
           extractedData: {
-            reference: data.analysisData.référence_dessin ||
-              data.analysisData.reference_dessin || {
-                valeur: "Non spécifié",
-                confiance: 0,
-                raison: "Non trouvé",
-              },
-            description: data.analysisData.description || {
-              valeur: "Non spécifié",
-              confiance: 0,
-              raison: "Non trouvé",
-            },
-            material: data.analysisData.matériau ||
-              data.analysisData.materiau || { valeur: "Non spécifié", confiance: 0, raison: "Non trouvé" },
-            pieceType: data.analysisData.type_pièce ||
-              data.analysisData.type_piece || { valeur: "autre", confiance: 0, raison: "Non trouvé" },
-            dimensions: data.analysisData.dimensions || {},
-            processes: data.analysisData.procédés || data.analysisData.procedes || [],
-            notes: data.analysisData.notes_importantes || [],
+            // Champs standards vides (maintenus pour compatibilité mais non utilisés)
+            reference: { valeur: "", confiance: 0, raison: "" },
+            description: { valeur: "", confiance: 0, raison: "" },
+            material: { valeur: "", confiance: 0, raison: "" },
+            pieceType: { valeur: "", confiance: 0, raison: "" },
+            dimensions: {},
+            processes: [],
+            // Uniquement les champs du profil d'extraction
             customFields: Object.keys(customFields).length > 0 ? customFields : undefined,
           },
         }
