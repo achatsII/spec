@@ -186,6 +186,20 @@ export default function TechnicalDrawingAnalyzer() {
       return
     }
 
+    // Vérifier que l'utilisateur n'est pas à l'étape 1 (Configuration)
+    if (currentStep === 1) {
+      alert("Vous devez d'abord analyser un plan (étape 2) avant de pouvoir sauvegarder")
+      return
+    }
+
+    // Déterminer le statut - ne jamais sauvegarder de brouillon
+    const status = calculationResult ? "completed" : isValidated ? "validated" : currentStep >= 2 ? "analyzed" : "draft"
+    
+    if (status === "draft") {
+      alert("Impossible de sauvegarder un brouillon. Veuillez d'abord analyser un plan.")
+      return
+    }
+
     setIsSaving(true)
 
     try {
@@ -201,7 +215,7 @@ export default function TechnicalDrawingAnalyzer() {
         fileType: analysisResult.fileType,
         analysisResult: analysisResult,
         calculationResult: calculationResult,
-        status: calculationResult ? "completed" : isValidated ? "validated" : "analyzed",
+        status: status,
         validated: isValidated,
         contextText: contextText || undefined,
         quantity: quantity || 1,
@@ -234,6 +248,12 @@ export default function TechnicalDrawingAnalyzer() {
 
   // Fonction de sauvegarde avec versioning complet
   const autoSaveAnalysis = async (step: 1 | 2 | 3 | 4, validated: boolean, calculationsValidated: boolean, forceNewVersion = false) => {
+    // NE JAMAIS sauvegarder à l'étape 1 (Configuration)
+    if (step === 1) {
+      console.log("🚫 Sauvegarde automatique ignorée: étape Configuration (étape 1) ne doit jamais être enregistrée")
+      return
+    }
+
     // Éviter les sauvegardes simultanées
     if (isSavingAuto) {
       console.log("⏳ Sauvegarde déjà en cours, ignorée")
@@ -275,6 +295,13 @@ export default function TechnicalDrawingAnalyzer() {
       if (step >= 2) status = "analyzed"
       if (validated) status = "validated"
       if (calculationsValidated) status = "completed"
+
+      // NE JAMAIS sauvegarder les analyses de type "draft" (brouillon)
+      if (status === "draft") {
+        console.log("🚫 Sauvegarde automatique ignorée: statut 'draft' (brouillon) ne doit jamais être enregistré")
+        setIsSavingAuto(false)
+        return
+      }
 
       const now = new Date().toISOString()
 
@@ -416,8 +443,8 @@ export default function TechnicalDrawingAnalyzer() {
       }
     }
 
-    // Sauvegarder automatiquement lors du changement d'étape
-    if (analysisResult && selectedClient && selectedProfile) {
+    // Sauvegarder automatiquement lors du changement d'étape (sauf si on revient à l'étape 1)
+    if (analysisResult && selectedClient && selectedProfile && newStep !== 1) {
       setTimeout(() => {
         autoSaveAnalysis(
           newStep,
