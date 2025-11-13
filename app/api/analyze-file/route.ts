@@ -135,10 +135,19 @@ function convertArrayFormatToObjectFormat(arrayData: any[]): any {
         break
       default:
         // Champs personnalisés
-        result.champs_personnalises[name] = {
-          valeur: value || "Non spécifié",
-          confiance: confidence || 0,
-          raison: justification || "Non trouvé",
+        // Si c'est un objet avec value et unit, c'est probablement une dimension
+        if (typeof value === "object" && value !== null && "value" in value && "unit" in value) {
+          result.champs_personnalises[name] = {
+            valeur: value, // Garder l'objet { value, unit } tel quel
+            confiance: confidence || 0,
+            raison: justification || "Non trouvé",
+          }
+        } else {
+          result.champs_personnalises[name] = {
+            valeur: value || "Non spécifié",
+            confiance: confidence || 0,
+            raison: justification || "Non trouvé",
+          }
         }
         break
     }
@@ -377,6 +386,11 @@ IMPORTANT: Tu dois repondre UNIQUEMENT avec un tableau JSON d'objets. Chaque obj
 - "confidence": un score de confiance entre 0 et 100
 - "justification": l'explication de comment la valeur a ete obtenue
 
+CRITIQUE - NOMS DES PROPRIETES:
+Pour les champs de type "object" ou "array", tu dois utiliser EXACTEMENT les noms de proprietes montres dans les exemples du prompt principal.
+Les noms de proprietes sont SANS ACCENTS et en minuscules (ex: "quantite" et NON "quantité", "diametre" et NON "diamètre").
+Ne traduis PAS et n'invente PAS de noms de proprietes differents. Utilise uniquement ceux specifies dans les exemples du prompt principal.
+
 IMPORTANT: Tu dois extraire UNIQUEMENT les champs listes ci-dessus. N'extrais aucun autre champ qui n'est pas dans cette liste.
 
 Ne jamais inventer d information si elle n est pas visible. Toujours expliquer comment chaque valeur a ete trouvee. Si une unite est implicite, tu peux la deduire mais avec prudence. Utilise ton jugement d expert pour identifier des procedes ou types standards. Tu dois rendre la sortie exploitable automatiquement: pas de texte hors JSON. En cas de doute: si une valeur est manquante ou illisible, utilise value: "Non specifie" avec confidence: 0 et une justification claire.`
@@ -414,6 +428,12 @@ IMPORTANT: Reponds UNIQUEMENT avec un tableau JSON d'objets. Chaque objet doit a
 - "value": la valeur extraite (peut etre une string, un nombre, un objet, ou un tableau selon le type du champ)
 - "confidence": un score de confiance entre 0 et 100
 - "justification": l'explication de comment la valeur a ete obtenue (mentionne si elle vient de l'agent 1, 2, ou d'une fusion)
+
+CRITIQUE - NOMS DES PROPRIETES:
+Pour les champs de type "object" ou "array", tu dois utiliser EXACTEMENT les noms de proprietes qui apparaissent dans les analyses des agents 1 et 2.
+Les noms de proprietes sont SANS ACCENTS et en minuscules (ex: "quantite" et NON "quantité", "diametre" et NON "diamètre").
+Ne traduis PAS et n'invente PAS de noms de proprietes differents. Preserve les noms de proprietes exactement comme ils apparaissent dans les donnees sources.
+Si les deux agents utilisent des noms differents, choisis celui qui est SANS ACCENTS et en minuscules.
 
 Ne retourne QUE le JSON, sans texte supplementaire, sans markdown, sans code blocks.`
 

@@ -115,7 +115,7 @@ export interface CustomFormula {
   id: string
   name: string
   description: string
-  category: "time" | "cost" | "quantity" | "optimization" | "other"
+  category: "time" | "cost" | "quantity" | "optimization" | "geometry" | "other"
   formula: string           // Expression mathématique utilisant les champs extraits
   unit?: string            // Unité du résultat (heures, $, pièces, etc.)
   variables: string[]      // Liste des variables utilisées dans la formule

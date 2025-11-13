@@ -130,9 +130,15 @@ export default function AnalysisResults({ result, onResultUpdate }: AnalysisResu
     // Uniquement les champs personnalisés (définis dans le profil d'extraction)
     if (result.extractedData.customFields) {
       Object.entries(result.extractedData.customFields).forEach(([fieldName, fieldData]: [string, any]) => {
+        // Donner un label plus joli pour la quantité
+        let displayLabel = fieldName
+        if (fieldName === "quantite" || fieldName === "quantité") {
+          displayLabel = "📦 Quantité de pièces"
+        }
+
         fields.push({
           name: fieldName,
-          label: fieldName,
+          label: displayLabel,
           data: fieldData,
           path: `customFields.${fieldName}`,
         })
@@ -272,7 +278,7 @@ export default function AnalysisResults({ result, onResultUpdate }: AnalysisResu
   const allFields = getAllExtractedFields()
 
   return (
-    <div className="space-y-4 pb-4">
+    <div className="space-y-4 w-full">
       <div className="text-xs sm:text-sm text-gray-500 break-words">
         <div className="font-medium mb-1">Fichier: {result.fileName}</div>
         <div>{result.timestamp.toLocaleString()}</div>

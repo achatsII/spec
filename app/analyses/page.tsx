@@ -58,11 +58,12 @@ export default function AnalysesPage() {
     }
   }
 
-  // Récupérer toutes les versions d'une analyse
+  // Récupérer toutes les versions d'une analyse (EXCLUT LES BROUILLONS)
   const getVersions = (analysis: SavedAnalysis): SavedAnalysis[] => {
     const parentId = analysis.parentId || analysis.id
     return analyses
       .filter((a) => a.id === parentId || a.parentId === parentId)
+      .filter((a) => a.status !== "draft") // NE JAMAIS afficher les brouillons
       .sort((a, b) => (b.versionNumber || 1) - (a.versionNumber || 1))
   }
 
@@ -75,7 +76,8 @@ export default function AnalysesPage() {
   }
 
   const filterAnalyses = () => {
-    let filtered = [...analyses]
+    // IMPORTANT: Exclure TOUS les brouillons dès le début
+    let filtered = analyses.filter(analysis => analysis.status !== "draft")
 
     // Grouper les analyses par parent ou par ID si pas de parent
     const groupedAnalyses = new Map<string, SavedAnalysis[]>()
@@ -160,8 +162,11 @@ export default function AnalysesPage() {
   }
 
   const exportToCSV = () => {
-    if (filteredAnalyses.length === 0) {
-      alert("Aucune analyse à exporter")
+    // Filtrer pour exclure les brouillons (draft)
+    const nonDraftAnalyses = filteredAnalyses.filter(analysis => analysis.status !== "draft")
+
+    if (nonDraftAnalyses.length === 0) {
+      alert("Aucune analyse valide à exporter (les brouillons sont exclus)")
       return
     }
 
@@ -189,8 +194,8 @@ export default function AnalysesPage() {
 
     // Collecter tous les noms de champs personnalisés et leurs propriétés
     const customFieldMap = new Map<string, string[]>() // fieldName -> [property1, property2, ...]
-    
-    filteredAnalyses.forEach((analysis) => {
+
+    nonDraftAnalyses.forEach((analysis) => {
       const customFields = analysis.analysisResult?.extractedData?.customFields
       if (customFields) {
         Object.entries(customFields).forEach(([fieldName, fieldData]: [string, any]) => {
@@ -219,7 +224,7 @@ export default function AnalysesPage() {
       "Coût/Pièce",
       "Date de création",
     ]
-    
+
     // Créer les colonnes pour les champs personnalisés
     const customHeaders: string[] = []
     const sortedFieldNames = Array.from(customFieldMap.keys()).sort()
@@ -288,19 +293,19 @@ export default function AnalysesPage() {
     }
 
     // Créer les lignes avec les valeurs
-    const rows = filteredAnalyses.map((analysis) => {
+    const rows = nonDraftAnalyses.map((analysis) => {
       const customFields = analysis.analysisResult?.extractedData?.customFields || {}
       
       // Colonnes de base
       const baseRow = [
-        analysis.title,
-        analysis.clientName || "",
-        analysis.fileName,
-        analysis.status,
-        analysis.validated ? "Oui" : "Non",
-        analysis.calculationResult?.piecesPerBar?.toString() || "",
-        analysis.calculationResult?.estimatedCost?.toString() || "",
-        new Date(analysis.createdAt).toLocaleDateString(),
+      analysis.title,
+      analysis.clientName || "",
+      analysis.fileName,
+      analysis.status,
+      analysis.validated ? "Oui" : "Non",
+      analysis.calculationResult?.piecesPerBar?.toString() || "",
+      analysis.calculationResult?.estimatedCost?.toString() || "",
+      new Date(analysis.createdAt).toLocaleDateString(),
       ]
       
       // Colonnes des champs personnalisés (dans le même ordre que les en-têtes)

@@ -56,15 +56,21 @@ Analyse le document technique. Extrais les informations suivantes: `
       
       clientProfile.customFields.forEach((field) => {
         const fieldInstruction = field.instruction || `Extraire ${field.label || field.name}`
-        fieldDetails.push(`${field.name} (${field.label}): ${fieldInstruction}`)
-        
+
+        // Pour les champs de type "dimension", ajouter une instruction spéciale sur le format
+        if (field.type === "dimension") {
+          fieldDetails.push(`${field.name} (${field.label}): ${fieldInstruction}. IMPORTANT: Ce champ doit retourner un objet avec la structure { value: <nombre>, unit: "<unite>" } ou <nombre> est la valeur numerique et <unite> est l'unite de mesure (mm, in, cm, etc.)`)
+        } else {
+          fieldDetails.push(`${field.name} (${field.label}): ${fieldInstruction}`)
+        }
+
         // Créer un exemple pour chaque champ selon son type
         let exampleValue: any = "..."
         let exampleDataType = "string"
-        
+
         if (field.type === "dimension") {
-          exampleValue = 100
-          exampleDataType = "number"
+          exampleValue = { value: 100, unit: "mm" }
+          exampleDataType = "object"
         } else if (field.type === "objet" && field.structure) {
           const objExample: any = {}
           field.structure.properties.forEach((prop: string) => {
@@ -73,7 +79,12 @@ Analyse le document technique. Extrais les informations suivantes: `
           exampleValue = objExample
           exampleDataType = "object"
         } else if (field.type === "liste_objets" && field.structure) {
-          exampleValue = [{ [field.structure.properties[0]]: "..." }]
+          // Créer un exemple complet avec toutes les propriétés
+          const objExample: any = {}
+          field.structure.properties.forEach((prop: string) => {
+            objExample[prop] = "..."
+          })
+          exampleValue = [objExample]
           exampleDataType = "array"
         }
         
@@ -97,6 +108,11 @@ Analyse le document technique. Extrais les informations suivantes: `
 
 Format attendu (exemples pour les champs a extraire):
 ${JSON.stringify(fieldExamples, null, 2)}
+
+CRITIQUE - NOMS DES PROPRIETES:
+Pour les champs de type "object" ou "array", tu dois utiliser EXACTEMENT les noms de proprietes montres dans les exemples ci-dessus.
+Les noms de proprietes sont SANS ACCENTS et en minuscules (ex: "quantite" et NON "quantité", "diametre" et NON "diamètre").
+Ne traduis PAS et n'invente PAS de noms de proprietes differents. Utilise uniquement ceux specifies dans les exemples.
 
 IMPORTANT: Tu dois extraire UNIQUEMENT les champs listes ci-dessus. N'extrais aucun autre champ qui n'est pas dans cette liste.`
 
@@ -136,6 +152,8 @@ IMPORTANT: Tu dois extraire UNIQUEMENT les champs listes ci-dessus. N'extrais au
         console.log("🔍 champs_personnalises présents?", !!data.analysisData.champs_personnalises)
         
         const customFields: Record<string, any> = {}
+        
+        // Ajouter les champs personnalisés
         if (data.analysisData.champs_personnalises) {
           console.log("🔍 Contenu de champs_personnalises:", JSON.stringify(data.analysisData.champs_personnalises, null, 2))
           Object.entries(data.analysisData.champs_personnalises).forEach(([key, value]) => {
@@ -143,6 +161,21 @@ IMPORTANT: Tu dois extraire UNIQUEMENT les champs listes ci-dessus. N'extrais au
             customFields[key] = value
           })
         }
+        
+        // Ajouter aussi les dimensions dans customFields pour qu'elles soient affichées
+        // (longueur, largeur, hauteur, épaisseur peuvent être des champs extractibles)
+        if (data.analysisData.dimensions) {
+          console.log("🔍 Dimensions trouvées:", JSON.stringify(data.analysisData.dimensions, null, 2))
+          Object.entries(data.analysisData.dimensions).forEach(([dimName, dimValue]: [string, any]) => {
+            // Vérifier si cette dimension n'est pas déjà dans customFields
+            // (pour éviter les doublons si elle est aussi dans champs_personnalises)
+            if (!customFields[dimName] && dimValue && typeof dimValue === "object" && "valeur" in dimValue) {
+              console.log(`🔍 Ajout dimension dans customFields: ${dimName}`, dimValue)
+              customFields[dimName] = dimValue
+            }
+          })
+        }
+        
         console.log("🔍 customFields final:", JSON.stringify(customFields, null, 2))
 
         const result: AnalysisResult = {

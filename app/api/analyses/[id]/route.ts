@@ -183,6 +183,31 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
     console.log("Mise à jour de l'analyse:", analysisId)
 
+    // NETTOYAGE AUTOMATIQUE: Supprimer tous les anciens brouillons (draft) du même client
+    // pour éviter l'accumulation dans la base de données
+    if (analysis.status !== "draft" && analysis.clientId) {
+      try {
+        console.log("🧹 Nettoyage des brouillons du client:", analysis.clientId)
+        const deleteResponse = await callGateway(`/api/v1/data/${DATA_TYPE}/filter`, {
+          method: "DELETE",
+          body: JSON.stringify({
+            mongo_filter: {
+              "json_data.app_identifier": { "$eq": APP_IDENTIFIER },
+              "json_data.clientId": { "$eq": analysis.clientId },
+              "json_data.status": { "$eq": "draft" }
+            }
+          })
+        })
+        const deleteData = await deleteResponse.json()
+        if (deleteData.success) {
+          console.log(`✅ ${deleteData.deleted_count || 0} brouillon(s) supprimé(s)`)
+        }
+      } catch (cleanupError) {
+        console.warn("⚠️ Erreur lors du nettoyage des brouillons (non bloquant):", cleanupError)
+        // Ne pas bloquer la sauvegarde si le nettoyage échoue
+      }
+    }
+
     const response = await callGateway(`/api/v1/data/${DATA_TYPE}/one/${analysisId}`, {
       method: "PUT",
       body: JSON.stringify({

@@ -95,24 +95,41 @@ export default function TechnicalDrawingAnalyzer() {
   }
 
   const handleFileAnalyzed = async (result: AnalysisResult) => {
-    setAnalysisResult(result)
+    // Ajouter la quantité saisie par l'utilisateur dans les données extraites
+    const updatedResult: AnalysisResult = {
+      ...result,
+      extractedData: {
+        ...result.extractedData,
+        customFields: {
+          ...(result.extractedData.customFields || {}),
+          quantite: {
+            valeur: quantity || 1,
+            confiance: 100, // Confiance maximale car saisi par l'utilisateur
+            raison: "Quantité saisie par l'utilisateur dans la configuration"
+          }
+        }
+      }
+    }
+
+    setAnalysisResult(updatedResult)
     setCalculationResult(null)
     setIsValidated(false)
     setCalculationsValidated(false)
-    setCurrentStep(2)
+    setCurrentStep(2) // On passe IMMÉDIATEMENT à l'étape 2
 
     // Améliorer le titre si une référence est trouvée ET que le titre n'a pas été défini manuellement
     // Ne mettre à jour le titre que s'il est vide ou s'il correspond au nom du fichier
-    if (result.extractedData.reference?.valeur && result.extractedData.reference.valeur !== "Non spécifié") {
+    if (updatedResult.extractedData.reference?.valeur && updatedResult.extractedData.reference.valeur !== "Non spécifié") {
       const currentTitle = analysisTitle || ""
       const titleFromFile = selectedFile?.name.replace(/\.(pdf|png|jpg|jpeg)$/i, "") || ""
       // Ne mettre à jour que si le titre actuel est vide ou correspond au nom du fichier
       if (!currentTitle || currentTitle === titleFromFile) {
-        setAnalysisTitle(result.extractedData.reference.valeur)
+        setAnalysisTitle(updatedResult.extractedData.reference.valeur)
       }
     }
 
     // Sauvegarder automatiquement dès que l'analyse est terminée (V1)
+    // IMPORTANT: On est maintenant à l'étape 2, donc la sauvegarde sera autorisée
     setTimeout(async () => {
       if (selectedClient && selectedProfile && result) {
         await autoSaveAnalysis(2, false, false, true) // forceNewVersion = true pour V1
@@ -584,14 +601,27 @@ export default function TechnicalDrawingAnalyzer() {
         timestamp: timestamp,
         fileUrl: fileUrl || undefined,
         fileType: fileType || undefined,
+        // S'assurer que la quantité est dans les données extraites
+        extractedData: {
+          ...analysis.analysisResult.extractedData,
+          customFields: {
+            ...(analysis.analysisResult.extractedData.customFields || {}),
+            quantite: analysis.analysisResult.extractedData.customFields?.quantite || {
+              valeur: analysis.quantity || 1,
+              confiance: 100,
+              raison: "Quantité saisie par l'utilisateur dans la configuration"
+            }
+          }
+        }
       }
-      
+
       console.log("✅ AnalysisResult restauré:", {
         hasFileUrl: !!restoredAnalysisResult.fileUrl,
         hasFileType: !!restoredAnalysisResult.fileType,
         timestamp: restoredAnalysisResult.timestamp,
+        quantity: restoredAnalysisResult.extractedData.customFields?.quantite,
       })
-      
+
       setAnalysisResult(restoredAnalysisResult)
       setCalculationResult(analysis.calculationResult || null)
       
@@ -670,6 +700,9 @@ export default function TechnicalDrawingAnalyzer() {
 
   // Sauvegarder automatiquement après l'analyse initiale
   useEffect(() => {
+    // NE JAMAIS sauvegarder à l'étape 1
+    if (currentStep === 1) return
+
     if (analysisResult && selectedClient && selectedProfile && currentStep === 2 && !currentAnalysisId) {
       console.log("✅ Auto-sauvegarde déclenchée après analyse complète")
 
@@ -684,6 +717,9 @@ export default function TechnicalDrawingAnalyzer() {
 
   // Détecter les modifications des données extraites et réinitialiser la validation si nécessaire
   useEffect(() => {
+    // NE JAMAIS sauvegarder à l'étape 1
+    if (currentStep === 1) return
+
     // Si on est à l'étape 2 ou 3 et que les données ont été validées
     if (analysisResult && isValidated && validatedDataSnapshot && (currentStep === 2 || currentStep === 3)) {
       const currentDataSnapshot = JSON.stringify(analysisResult.extractedData)
@@ -698,9 +734,9 @@ export default function TechnicalDrawingAnalyzer() {
           setCurrentStep(2)
         }
 
-        // Sauvegarder immédiatement après réinitialisation de la validation
+        // Sauvegarder immédiatement après réinitialisation de la validation (uniquement si pas à l'étape 1)
         setTimeout(() => {
-          if (selectedClient && selectedProfile && analysisResult) {
+          if (selectedClient && selectedProfile && analysisResult && currentStep >= 2) {
             autoSaveAnalysis(2, false, false)
           }
         }, 100)
@@ -711,6 +747,9 @@ export default function TechnicalDrawingAnalyzer() {
 
   // Sauvegarder automatiquement quand les données sont modifiées (avec debounce)
   useEffect(() => {
+    // NE JAMAIS sauvegarder à l'étape 1
+    if (currentStep === 1) return
+
     // Ne sauvegarder que si on a déjà une analyse sauvegardée
     if (analysisResult && selectedClient && selectedProfile && currentStep >= 2 && currentAnalysisId) {
       // Annuler le timeout précédent
@@ -792,7 +831,28 @@ export default function TechnicalDrawingAnalyzer() {
                         min="1"
                         required
                         value={quantity}
-                        onChange={(e) => setQuantity(Number.parseInt(e.target.value) || 1)}
+                        onChange={(e) => {
+                          const newQuantity = Number.parseInt(e.target.value) || 1
+                          setQuantity(newQuantity)
+
+                          // Mettre à jour la quantité dans les données extraites si une analyse existe
+                          if (analysisResult) {
+                            setAnalysisResult({
+                              ...analysisResult,
+                              extractedData: {
+                                ...analysisResult.extractedData,
+                                customFields: {
+                                  ...(analysisResult.extractedData.customFields || {}),
+                                  quantite: {
+                                    valeur: newQuantity,
+                                    confiance: 100,
+                                    raison: "Quantité saisie par l'utilisateur dans la configuration"
+                                  }
+                                }
+                              }
+                            })
+                          }
+                        }}
                         className="h-8 text-sm"
                       />
                     </div>
@@ -1070,21 +1130,23 @@ export default function TechnicalDrawingAnalyzer() {
   // ÉTAPE 3 : CALCULS
   const renderStep3 = () => {
     return (
-      <div className="h-[calc(100vh-280px)] sm:h-[calc(100vh-320px)] overflow-hidden">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 h-full">
+      <div className="min-h-[calc(100vh-280px)] sm:min-h-[calc(100vh-320px)] overflow-y-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 pb-4 sm:pb-6">
           {/* Colonne gauche : Données extraites */}
-          <div className="lg:col-span-1 h-full flex flex-col">
-            <Card className="border-[#0078FF]/20 h-full flex flex-col">
+          <div className="lg:col-span-1 flex flex-col">
+            <Card className="border-[#0078FF]/20 flex flex-col">
               <CardHeader className="bg-[#0078FF]/5 flex-shrink-0">
                 <CardTitle className="flex items-center gap-2 text-[#0078FF] text-lg">
                   <FileText className="h-6 w-6" />
                   Données Extraites
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-6 flex-1 overflow-hidden">
+              <CardContent className="pt-6 flex-1 flex flex-col">
                 {analysisResult ? (
-                  <div className="h-full overflow-y-auto pr-2">
-                    <AnalysisResults result={analysisResult} onResultUpdate={setAnalysisResult} />
+                  <div className="flex flex-col">
+                    <div className="flex-1">
+                      <AnalysisResults result={analysisResult} onResultUpdate={setAnalysisResult} />
+                    </div>
                   </div>
                 ) : (
                   <div className="text-center py-12 text-gray-500">
@@ -1097,22 +1159,23 @@ export default function TechnicalDrawingAnalyzer() {
           </div>
 
           {/* Colonne droite : Calculs d'optimisation */}
-          <div className="lg:col-span-1 h-full flex flex-col">
-            <Card className="border-[#0078FF]/20 h-full flex flex-col">
+          <div className="lg:col-span-1 flex flex-col">
+            <Card className="border-[#0078FF]/20 flex flex-col">
               <CardHeader className="bg-[#0078FF]/5 flex-shrink-0">
                 <CardTitle className="flex items-center gap-2 text-[#0078FF] text-lg">
                   <BarChart3 className="h-6 w-6" />
                   Calculs d'optimisation
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-6 flex-1 overflow-hidden flex flex-col">
+              <CardContent className="pt-6 flex-1 flex flex-col">
                 {analysisResult && selectedProfile && isValidated ? (
-                  <div className="flex-1 flex flex-col overflow-hidden">
-                    <div className="flex-1 overflow-y-auto pr-2">
+                  <div className="flex flex-col">
+                    <div className="flex-1">
                       <CalculationEngine
                         analysisResult={analysisResult}
                         clientProfile={selectedProfile}
                         onCalculationComplete={handleCalculationComplete}
+                        onResultUpdate={setAnalysisResult}
                         isCalculating={isCalculating}
                         setIsCalculating={setIsCalculating}
                       />
