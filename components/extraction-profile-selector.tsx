@@ -3,8 +3,7 @@
 import { useState, useEffect } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Plus, Edit, Trash2 } from "lucide-react"
+import { Plus } from "lucide-react"
 import type { ExtractionProfile } from "@/types/analysis"
 import ExtractionProfileModal from "./extraction-profile-modal"
 
@@ -112,7 +111,7 @@ export default function ExtractionProfileSelector({
   }
 
   return (
-    <div className="space-y-4">
+    <div>
       <div className="flex gap-2">
         <Select
           value={selectedProfile?.id || "none"}
@@ -126,7 +125,7 @@ export default function ExtractionProfileSelector({
           }}
           disabled={isLoading}
         >
-          <SelectTrigger className="flex-1">
+          <SelectTrigger className="flex-1 h-8 text-sm">
             <SelectValue placeholder={isLoading ? "Chargement..." : "Sélectionner un profil"} />
           </SelectTrigger>
           <SelectContent>
@@ -147,70 +146,11 @@ export default function ExtractionProfileSelector({
             setIsModalOpen(true)
           }}
           disabled={isLoading}
+          className="h-8 w-8"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-3 w-3" />
         </Button>
       </div>
-
-      {selectedProfile && (
-        <div className="p-4 bg-gray-50 rounded-lg space-y-3">
-          <div className="flex justify-between items-start">
-            <div className="flex-1">
-              <h4 className="font-medium text-sm">{selectedProfile.name}</h4>
-              {selectedProfile.description && (
-                <p className="text-xs text-gray-600 mt-1">{selectedProfile.description}</p>
-              )}
-            </div>
-            <div className="flex gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setEditingProfile(selectedProfile)
-                  setIsModalOpen(true)
-                }}
-              >
-                <Edit className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleProfileDelete(selectedProfile.id)}
-                className="text-red-600 hover:text-red-700"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex gap-2 flex-wrap">
-            <Badge variant="outline" className="text-xs">
-              {selectedProfile.customFields?.length || 0} champ{selectedProfile.customFields?.length !== 1 ? "s" : ""}
-            </Badge>
-            <Badge variant="secondary" className="text-xs">
-              {selectedProfile.formulas?.length || 0} formule{selectedProfile.formulas?.length !== 1 ? "s" : ""}
-            </Badge>
-          </div>
-
-          {selectedProfile.customFields && selectedProfile.customFields.length > 0 && (
-            <div className="pt-2 border-t">
-              <p className="text-xs font-medium text-gray-700 mb-1">Champs extraits:</p>
-              <div className="flex flex-wrap gap-1">
-                {selectedProfile.customFields.slice(0, 4).map((field) => (
-                  <Badge key={field.id} variant="outline" className="text-xs">
-                    {field.label || field.name}
-                  </Badge>
-                ))}
-                {selectedProfile.customFields.length > 4 && (
-                  <Badge variant="outline" className="text-xs">
-                    +{selectedProfile.customFields.length - 4}
-                  </Badge>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       <ExtractionProfileModal
         isOpen={isModalOpen}

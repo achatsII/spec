@@ -103,12 +103,18 @@ export default function FileUpload({ onFileAnalyzed, clientProfile, isAnalyzing,
 
       if (data.success && data.analysisData) {
         // Extraire les champs personnalisés si présents
+        console.log("🔍 Données brutes reçues:", JSON.stringify(data.analysisData, null, 2))
+        console.log("🔍 champs_personnalises présents?", !!data.analysisData.champs_personnalises)
+        
         const customFields: Record<string, any> = {}
         if (data.analysisData.champs_personnalises) {
+          console.log("🔍 Contenu de champs_personnalises:", JSON.stringify(data.analysisData.champs_personnalises, null, 2))
           Object.entries(data.analysisData.champs_personnalises).forEach(([key, value]) => {
+            console.log(`🔍 Ajout champ personnalisé: ${key}`, value)
             customFields[key] = value
           })
         }
+        console.log("🔍 customFields final:", JSON.stringify(customFields, null, 2))
 
         const result: AnalysisResult = {
           id: Date.now().toString(),
@@ -157,15 +163,15 @@ export default function FileUpload({ onFileAnalyzed, clientProfile, isAnalyzing,
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2 flex flex-col h-full">
       {error && (
-        <Alert className="border-red-200 bg-red-50">
+        <Alert className="border-red-200 bg-red-50 flex-shrink-0">
           <AlertCircle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800">{error}</AlertDescription>
+          <AlertDescription className="text-red-800 text-xs">{error}</AlertDescription>
         </Alert>
       )}
 
-      <div className="border-2 border-dashed border-[#0078FF]/30 rounded-lg p-6 text-center hover:border-[#0078FF]/50 transition-colors">
+      <div className="border-2 border-dashed border-[#0078FF]/30 rounded-lg p-3 text-center hover:border-[#0078FF]/50 transition-colors flex-shrink-0">
         <input
           type="file"
           ref={fileInputRef}
@@ -175,26 +181,27 @@ export default function FileUpload({ onFileAnalyzed, clientProfile, isAnalyzing,
         />
 
         {selectedFile ? (
-          <div className="space-y-2">
-            <FileText className="h-12 w-12 mx-auto text-[#0078FF]" />
-            <p className="text-sm font-medium">{selectedFile.name}</p>
+          <div className="space-y-1">
+            <FileText className="h-8 w-8 mx-auto text-[#0078FF]" />
+            <p className="text-xs font-medium truncate">{selectedFile.name}</p>
             <p className="text-xs text-gray-500">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
           </div>
         ) : (
-          <div className="space-y-2">
-            <Upload className="h-12 w-12 mx-auto text-gray-400" />
-            <p className="text-sm text-gray-600">Glissez un fichier ici ou cliquez pour sélectionner</p>
-            <p className="text-xs text-gray-500">PDF, PNG, JPG (max 15MB)</p>
+          <div className="space-y-1">
+            <Upload className="h-8 w-8 mx-auto text-gray-400" />
+            <p className="text-xs text-gray-600">Glissez un fichier ici</p>
+            <p className="text-xs text-gray-500">PDF, PNG, JPG</p>
           </div>
         )}
 
         <Button
           onClick={() => fileInputRef.current?.click()}
           variant="outline"
-          className="mt-4 border-[#0078FF] text-[#0078FF] hover:bg-[#0078FF] hover:text-white"
+          size="sm"
+          className="mt-2 h-7 text-xs border-[#0078FF] text-[#0078FF] hover:bg-[#0078FF] hover:text-white"
           disabled={isAnalyzing}
         >
-          Sélectionner un fichier
+          Sélectionner
         </Button>
       </div>
 
@@ -202,12 +209,12 @@ export default function FileUpload({ onFileAnalyzed, clientProfile, isAnalyzing,
         <Button
           onClick={analyzeFile}
           disabled={isAnalyzing || !clientProfile}
-          className="w-full bg-[#0078FF] hover:bg-[#0078FF]/90"
+          className="w-full bg-[#0078FF] hover:bg-[#0078FF]/90 h-8 text-sm flex-shrink-0"
         >
           {isAnalyzing ? (
             <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Analyse en cours...
+              <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+              Analyse...
             </>
           ) : (
             "Analyser le plan"
@@ -216,7 +223,7 @@ export default function FileUpload({ onFileAnalyzed, clientProfile, isAnalyzing,
       )}
 
       {!clientProfile && selectedFile && (
-        <p className="text-sm text-amber-600 text-center">Veuillez sélectionner un profil client avant l'analyse</p>
+        <p className="text-xs text-amber-600 text-center flex-shrink-0">Sélectionnez un profil avant l'analyse</p>
       )}
     </div>
   )

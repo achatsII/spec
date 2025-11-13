@@ -89,40 +89,36 @@ export default function FilePreview({ file, fileUrl }: FilePreviewProps) {
   }
 
   return (
-    <Card className="border-[#0078FF]/20">
-      <CardHeader className="bg-[#0078FF]/5">
-        <CardTitle className="flex items-center gap-2 text-[#0078FF] text-base">
-          {fileType === "pdf" ? <FileText className="h-5 w-5" /> : <ImageIcon className="h-5 w-5" />}
-          Aperçu du fichier
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        {fileType === "pdf" && preview && (
-          <div className="w-full" style={{ height: "600px" }}>
-            <iframe
-              src={preview}
-              className="w-full h-full border-0"
-              title="Aperçu PDF"
-            />
-          </div>
-        )}
+    <div className="w-full h-full flex flex-col">
+      {fileType === "pdf" && preview && (
+        <div className="w-full h-full flex-1 min-h-0">
+          <iframe
+            src={preview}
+            className="w-full h-full border-0 rounded-lg"
+            title="Aperçu PDF"
+          />
+        </div>
+      )}
 
-        {fileType === "image" && preview && (
-          <div className="w-full p-4">
-            <img
-              src={preview}
-              alt="Aperçu du plan"
-              className="w-full h-auto max-h-[600px] object-contain rounded-lg"
-            />
-          </div>
-        )}
+      {fileType === "image" && preview && (
+        <div className="w-full h-full flex-1 min-h-0 flex items-center justify-center p-2">
+          <img
+            src={preview}
+            alt="Aperçu du plan"
+            className="max-w-full max-h-full w-auto h-auto object-contain rounded-lg"
+          />
+        </div>
+      )}
 
-        {!fileType && (
-          <div className="py-12 text-center text-gray-500">
-            <p>Format de fichier non supporté pour l'aperçu</p>
+      {!fileType && (
+        <div className="w-full h-full flex items-center justify-center text-center text-gray-500">
+          <div>
+            <FileText className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+            <p>Aucun fichier sélectionné</p>
+            <p className="text-sm text-gray-400">L'aperçu apparaîtra ici</p>
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      )}
+    </div>
   )
 }

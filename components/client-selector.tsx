@@ -80,7 +80,7 @@ export default function ClientSelector({ selectedClient, onClientSelect }: Clien
   }
 
   return (
-    <div className="space-y-4">
+    <div>
       <div className="flex gap-2">
         <Select
           value={selectedClient?.id || "none"}
@@ -94,7 +94,7 @@ export default function ClientSelector({ selectedClient, onClientSelect }: Clien
           }}
           disabled={isLoading}
         >
-          <SelectTrigger className="flex-1">
+          <SelectTrigger className="flex-1 h-8 text-sm">
             <SelectValue placeholder={isLoading ? "Chargement..." : "Sélectionner un client"} />
           </SelectTrigger>
           <SelectContent>
@@ -107,17 +107,10 @@ export default function ClientSelector({ selectedClient, onClientSelect }: Clien
           </SelectContent>
         </Select>
 
-        <Button variant="outline" size="icon" onClick={() => setIsModalOpen(true)} disabled={isLoading}>
-          <Plus className="h-4 w-4" />
+        <Button variant="outline" size="icon" onClick={() => setIsModalOpen(true)} disabled={isLoading} className="h-8 w-8">
+          <Plus className="h-3 w-3" />
         </Button>
       </div>
-
-      {selectedClient && (
-        <div className="text-sm text-gray-600 space-y-1">
-          {selectedClient.email && <p>📧 {selectedClient.email}</p>}
-          {selectedClient.phone && <p>📞 {selectedClient.phone}</p>}
-        </div>
-      )}
 
       <ClientModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} client={null} onSave={handleClientSave} />
     </div>

@@ -186,6 +186,76 @@ export default function AnalysisResults({ result, onResultUpdate }: AnalysisResu
           </CardContent>
         </Card>
       )}
+
+      {/* Custom Fields / Champs personnalisés */}
+      {result.extractedData.customFields && Object.keys(result.extractedData.customFields).length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Champs personnalisés</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Object.entries(result.extractedData.customFields).map(([fieldName, fieldData]: [string, any]) => {
+                // Si c'est un tableau (comme les trous)
+                if (Array.isArray(fieldData.valeur)) {
+                  return (
+                    <div key={fieldName} className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <Label className="text-sm font-medium capitalize">{fieldName}</Label>
+                        <Badge className={getConfidenceColor(fieldData.confiance || 0)}>
+                          {fieldData.confiance || 0}%
+                        </Badge>
+                      </div>
+                      <div className="space-y-2 pl-4 border-l-2 border-gray-200">
+                        {fieldData.valeur.map((item: any, index: number) => (
+                          <div key={index} className="p-3 bg-gray-50 rounded-lg">
+                            {typeof item === "object" ? (
+                              <div className="space-y-1 text-sm">
+                                {Object.entries(item).map(([key, value]: [string, any]) => (
+                                  <div key={key} className="flex justify-between">
+                                    <span className="text-gray-600 capitalize">{key}:</span>
+                                    <span className="font-medium">{String(value)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="text-sm">{String(item)}</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {fieldData.raison && (
+                        <div className="text-xs text-gray-500">{fieldData.raison}</div>
+                      )}
+                    </div>
+                  )
+                }
+                // Si c'est un objet simple
+                return (
+                  <div key={fieldName} className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <Label className="text-sm font-medium capitalize">{fieldName}</Label>
+                      <Badge className={getConfidenceColor(fieldData.confiance || 0)}>
+                        {fieldData.confiance || 0}%
+                      </Badge>
+                    </div>
+                    <div className="text-sm">
+                      <div className="font-medium">
+                        {typeof fieldData.valeur === "object"
+                          ? JSON.stringify(fieldData.valeur, null, 2)
+                          : String(fieldData.valeur)}
+                      </div>
+                      {fieldData.raison && (
+                        <div className="text-gray-500 text-xs mt-1">{fieldData.raison}</div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

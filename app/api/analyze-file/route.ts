@@ -104,18 +104,47 @@ async function callGeminiAgent(
       let cleanedResponse = analysisText
 
       // Nettoyer les balises markdown si présentes
-      if (cleanedResponse.startsWith("```json")) {
-        cleanedResponse = cleanedResponse.replace(/```json\s*/, "").replace(/```\s*$/, "")
+      if (cleanedResponse.includes("```json")) {
+        // Extraire le JSON entre ```json et ```
+        const jsonMatch = cleanedResponse.match(/```json\s*([\s\S]*?)\s*```/)
+        if (jsonMatch) {
+          cleanedResponse = jsonMatch[1].trim()
+        } else {
+          // Essayer avec juste ```
+          const jsonMatch2 = cleanedResponse.match(/```\s*([\s\S]*?)\s*```/)
+          if (jsonMatch2) {
+            cleanedResponse = jsonMatch2[1].trim()
+          }
+        }
+      } else if (cleanedResponse.includes("```")) {
+        // Extraire le JSON entre ``` et ```
+        const jsonMatch = cleanedResponse.match(/```[^`]*\s*([\s\S]*?)\s*```/)
+        if (jsonMatch) {
+          cleanedResponse = jsonMatch[1].trim()
+        }
       }
-      if (cleanedResponse.startsWith("```")) {
-        cleanedResponse = cleanedResponse.replace(/```[^`]*/, "").replace(/```\s*$/, "")
+
+      // Si le texte commence par du texte non-JSON, chercher le premier {
+      if (!cleanedResponse.startsWith("{")) {
+        const firstBrace = cleanedResponse.indexOf("{")
+        if (firstBrace > 0) {
+          cleanedResponse = cleanedResponse.substring(firstBrace)
+        }
+      }
+
+      // Si le texte se termine par du texte non-JSON, chercher le dernier }
+      if (!cleanedResponse.endsWith("}")) {
+        const lastBrace = cleanedResponse.lastIndexOf("}")
+        if (lastBrace > 0) {
+          cleanedResponse = cleanedResponse.substring(0, lastBrace + 1)
+        }
       }
 
       parsedData = JSON.parse(cleanedResponse)
       console.log(`[${agentName}] JSON parsé avec succès`)
     } catch (parseError) {
       console.error(`[${agentName}] Erreur parsing JSON:`, parseError)
-      console.error(`[${agentName}] Contenu reçu (premiers 500 chars):`, analyzeData.results?.[0]?.analysis?.substring(0, 500) || "N/A")
+      console.error(`[${agentName}] Contenu reçu (premiers 1000 chars):`, analyzeData.results?.[0]?.analysis?.substring(0, 1000) || "N/A")
       parsedData = {
         référence_dessin: { valeur: "Non spécifié", confiance: 0, raison: "Erreur de parsing" },
         description: { valeur: "Non spécifié", confiance: 0, raison: "Erreur de parsing" },
@@ -124,6 +153,7 @@ async function callGeminiAgent(
         dimensions: {},
         procédés: [],
         notes_importantes: [],
+        champs_personnalises: {},
       }
     }
 
