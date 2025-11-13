@@ -165,35 +165,166 @@ export default function AnalysesPage() {
       return
     }
 
-    const headers = [
+    // Fonction pour extraire toutes les propriétés d'un champ (pour objets et listes d'objets)
+    const extractFieldProperties = (field: any): string[] => {
+      if (!field || !field.valeur) return []
+      
+      const value = field.valeur
+      
+      // Si c'est un tableau d'objets
+      if (Array.isArray(value) && value.length > 0) {
+        const firstItem = value[0]
+        if (typeof firstItem === "object" && firstItem !== null) {
+          return Object.keys(firstItem)
+        }
+      }
+      
+      // Si c'est un objet simple
+      if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+        return Object.keys(value)
+      }
+      
+      return []
+    }
+
+    // Collecter tous les noms de champs personnalisés et leurs propriétés
+    const customFieldMap = new Map<string, string[]>() // fieldName -> [property1, property2, ...]
+    
+    filteredAnalyses.forEach((analysis) => {
+      const customFields = analysis.analysisResult?.extractedData?.customFields
+      if (customFields) {
+        Object.entries(customFields).forEach(([fieldName, fieldData]: [string, any]) => {
+          const properties = extractFieldProperties(fieldData)
+          
+          // Si le champ existe déjà, fusionner les propriétés
+          if (customFieldMap.has(fieldName)) {
+            const existingProps = customFieldMap.get(fieldName) || []
+            const allProps = [...new Set([...existingProps, ...properties])]
+            customFieldMap.set(fieldName, allProps)
+          } else {
+            customFieldMap.set(fieldName, properties)
+          }
+        })
+      }
+    })
+
+    // Créer les en-têtes : colonnes de base + colonnes dynamiques
+    const baseHeaders = [
       "Titre",
       "Client",
       "Fichier",
       "Statut",
       "Validé",
-      "Référence",
-      "Matériau",
-      "Type de pièce",
       "Pièces/Barre",
       "Coût/Pièce",
       "Date de création",
     ]
+    
+    // Créer les colonnes pour les champs personnalisés
+    const customHeaders: string[] = []
+    const sortedFieldNames = Array.from(customFieldMap.keys()).sort()
+    
+    sortedFieldNames.forEach((fieldName) => {
+      const properties = customFieldMap.get(fieldName) || []
+      
+      if (properties.length > 0) {
+        // C'est un objet ou une liste d'objets : créer une colonne par propriété
+        properties.forEach((prop) => {
+          customHeaders.push(`${fieldName}_${prop}`)
+        })
+      } else {
+        // C'est un champ simple : une seule colonne
+        customHeaders.push(fieldName)
+      }
+    })
+    
+    const headers = [...baseHeaders, ...customHeaders]
 
-    const rows = filteredAnalyses.map((analysis) => [
-      analysis.title,
-      analysis.clientName || "",
-      analysis.fileName,
-      analysis.status,
-      analysis.validated ? "Oui" : "Non",
-      analysis.analysisResult?.extractedData?.reference?.valeur || "",
-      analysis.analysisResult?.extractedData?.material?.valeur || "",
-      analysis.analysisResult?.extractedData?.pieceType?.valeur || "",
-      analysis.calculationResult?.piecesPerBar?.toString() || "",
-      analysis.calculationResult?.estimatedCost?.toString() || "",
-      new Date(analysis.createdAt).toLocaleDateString(),
-    ])
+    // Fonction pour formater une valeur de champ personnalisé
+    const formatCustomFieldValue = (field: any, fieldName: string, propertyName?: string): string => {
+      if (!field) return ""
+      
+      const value = field.valeur
+      if (value === null || value === undefined || value === "") return ""
+      
+      // Si une propriété spécifique est demandée (pour objets/listes d'objets)
+      if (propertyName) {
+        // Si c'est un tableau d'objets
+        if (Array.isArray(value) && value.length > 0) {
+          // Concaténer les valeurs de cette propriété pour tous les éléments
+          const values = value
+            .map((item: any) => {
+              if (typeof item === "object" && item !== null && propertyName in item) {
+                return String(item[propertyName])
+              }
+              return ""
+            })
+            .filter((v: string) => v !== "")
+          
+          return values.length > 0 ? values.join("; ") : ""
+        }
+        
+        // Si c'est un objet simple
+        if (typeof value === "object" && value !== null && !Array.isArray(value) && propertyName in value) {
+          return String(value[propertyName])
+        }
+        
+        return ""
+      }
+      
+      // Pas de propriété spécifique : valeur simple
+      // Si c'est un objet ou un tableau, on ne devrait pas arriver ici normalement
+      // mais on gère le cas pour la compatibilité
+      if (typeof value === "object") {
+        // Pour les objets simples sans propriété spécifique, sérialiser
+        try {
+          return JSON.stringify(value)
+        } catch {
+          return String(value)
+        }
+      }
+      
+      return String(value)
+    }
 
-    const csvContent = [headers, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n")
+    // Créer les lignes avec les valeurs
+    const rows = filteredAnalyses.map((analysis) => {
+      const customFields = analysis.analysisResult?.extractedData?.customFields || {}
+      
+      // Colonnes de base
+      const baseRow = [
+        analysis.title,
+        analysis.clientName || "",
+        analysis.fileName,
+        analysis.status,
+        analysis.validated ? "Oui" : "Non",
+        analysis.calculationResult?.piecesPerBar?.toString() || "",
+        analysis.calculationResult?.estimatedCost?.toString() || "",
+        new Date(analysis.createdAt).toLocaleDateString(),
+      ]
+      
+      // Colonnes des champs personnalisés (dans le même ordre que les en-têtes)
+      const customRow: string[] = []
+      
+      sortedFieldNames.forEach((fieldName) => {
+        const field = customFields[fieldName]
+        const properties = customFieldMap.get(fieldName) || []
+        
+        if (properties.length > 0) {
+          // C'est un objet ou une liste d'objets : une colonne par propriété
+          properties.forEach((prop) => {
+            customRow.push(formatCustomFieldValue(field, fieldName, prop))
+          })
+        } else {
+          // C'est un champ simple : une seule colonne
+          customRow.push(formatCustomFieldValue(field, fieldName))
+        }
+      })
+      
+      return [...baseRow, ...customRow]
+    })
+
+    const csvContent = [headers, ...rows].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n")
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
     const link = document.createElement("a")

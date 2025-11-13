@@ -297,7 +297,7 @@ async function callGeminiAgent(
     const trace: AgentTrace = {
       agent: agentName,
       input: {
-        prompt: prompt.substring(0, 200) + "...", // Tronquer pour le log
+        prompt: prompt, // Prompt complet pour les traces
         fileName: file.name,
       },
       output: parsedData,
@@ -306,6 +306,8 @@ async function callGeminiAgent(
     }
 
     console.log(`[${agentName}] Analyse terminée en ${duration}ms`)
+    console.log(`[${agentName}] Prompt length: ${prompt.length} caractères`)
+    console.log(`[${agentName}] Prompt (premiers 200 chars): ${prompt.substring(0, 200)}...`)
 
     return { data: parsedData, trace, fileUrl }
   } catch (error) {
@@ -352,28 +354,32 @@ export async function POST(request: NextRequest) {
     // ============================================
     // AGENT 2: VÉRIFICATEUR
     // ============================================
-    const verifierPrompt = `Tu es un agent verificateur specialise dans la validation et la correction d'analyses de plans techniques.
+    // Extraire la partie "Extrais les informations suivantes" du prompt principal
+    const extractFieldsPart = (prompt: string): string => {
+      const fieldsMatch = prompt.match(/Extrais les informations suivantes:([\s\S]*?)(?=IMPORTANT|$)/)
+      if (fieldsMatch) {
+        return fieldsMatch[1].trim()
+      }
+      // Fallback: extraire depuis le profil si disponible
+      return "Extrais les informations du plan technique"
+    }
 
-Tu dois re-analyser le plan technique fourni et comparer avec le resultat de l'agent principal suivant:
+    const fieldsPart = extractFieldsPart(prompt)
+    
+    const verifierPrompt = `Analyse l'IMAGE du document.
 
-RESULTAT DE L'AGENT PRINCIPAL:
-${JSON.stringify(principalData, null, 2)}
+${fieldsPart}
 
-TA MISSION:
-1. Re-analyser le plan avec attention particuliere aux erreurs ou omissions
-2. Identifier les champs avec une confiance faible (< 70%)
-3. Corriger les erreurs evidentes
-4. Completer les informations manquantes si visibles sur le plan
-5. Augmenter la precision des valeurs extraites
-
-IMPORTANT: Reponds UNIQUEMENT avec un tableau JSON d'objets dans le meme format que l'agent principal. Chaque objet doit avoir les cles suivantes:
-- "name": le nom du champ
+IMPORTANT: Tu dois repondre UNIQUEMENT avec un tableau JSON d'objets. Chaque objet doit avoir les cles suivantes:
+- "name": le nom exact du champ (doit correspondre exactement aux noms des champs ci-dessus)
 - "data_type": le type de donnees ("string", "number", "boolean", "array", "object", etc.)
-- "value": la valeur extraite
+- "value": la valeur extraite (peut etre une string, un nombre, un objet, ou un tableau selon le type du champ)
 - "confidence": un score de confiance entre 0 et 100
 - "justification": l'explication de comment la valeur a ete obtenue
 
-Si tu confirmes une valeur, augmente sa confiance. Si tu trouves une erreur, corrige-la et explique pourquoi dans la justification.`
+IMPORTANT: Tu dois extraire UNIQUEMENT les champs listes ci-dessus. N'extrais aucun autre champ qui n'est pas dans cette liste.
+
+Ne jamais inventer d information si elle n est pas visible. Toujours expliquer comment chaque valeur a ete trouvee. Si une unite est implicite, tu peux la deduire mais avec prudence. Utilise ton jugement d expert pour identifier des procedes ou types standards. Tu dois rendre la sortie exploitable automatiquement: pas de texte hors JSON. En cas de doute: si une valeur est manquante ou illisible, utilise value: "Non specifie" avec confidence: 0 et une justification claire.`
 
     const { data: verifierData, trace: verifierTrace, fileUrl: verifierFileUrl } = await callGeminiAgent(
       file,
@@ -385,32 +391,31 @@ Si tu confirmes une valeur, augmente sa confiance. Si tu trouves une erreur, cor
     // ============================================
     // AGENT 3: COMPILATEUR FINAL
     // ============================================
-    const compilerPrompt = `Tu es un agent compilateur final charge de synthetiser les resultats de plusieurs agents d'analyse.
-
-Tu as recu deux analyses du meme plan technique au format tableau JSON:
-
-ANALYSE 1 (Agent Principal):
+    const compilerPrompt = `Fusionne ces 2 analyses JSON d'un plan technique:
+1. Analyse Agent Principal: \`\`\`json
 ${JSON.stringify(principalData, null, 2)}
-
-ANALYSE 2 (Agent Verificateur):
+\`\`\`
+2. Analyse Agent Verificateur: \`\`\`json
 ${JSON.stringify(verifierData, null, 2)}
+\`\`\`
 
-TA MISSION:
-1. Synthetiser les deux analyses pour produire le JSON final le plus precis possible
-2. Pour chaque champ, choisir la valeur la plus fiable (confiance la plus elevee)
-3. Si les deux agents sont d'accord, augmenter la confiance
-4. Si les agents divergent, choisir la valeur la plus logique et documenter dans la justification
-5. Combiner les informations complementaires des deux analyses
-6. S'assurer que tous les champs requis sont presents
+TA MISSION: Fusionne, resous les conflits, et valide. Produis un JSON final propre. Le JSON doit etre un tableau d'objets, chaque objet ayant les cles "name", "data_type", "value", "confidence" (un nombre de 0 a 100), et "justification".
 
-IMPORTANT: Reponds UNIQUEMENT avec un tableau JSON d'objets dans le meme format. Chaque objet doit avoir les cles suivantes:
-- "name": le nom du champ (ex: "reference_dessin", "description", "materiau", "type_piece", etc.)
+Regles de fusion:
+1. Pour chaque champ, choisis la valeur la plus fiable (confiance la plus elevee)
+2. Si les deux agents sont d'accord, augmente la confiance
+3. Si les agents divergent, choisis la valeur la plus logique et documente dans la justification
+4. Combine les informations complementaires des deux analyses
+5. Assure que tous les champs requis sont presents
+
+IMPORTANT: Reponds UNIQUEMENT avec un tableau JSON d'objets. Chaque objet doit avoir les cles suivantes:
+- "name": le nom exact du champ (doit correspondre exactement aux noms des champs dans les analyses)
 - "data_type": le type de donnees ("string", "number", "boolean", "array", "object", etc.)
-- "value": la valeur extraite
+- "value": la valeur extraite (peut etre une string, un nombre, un objet, ou un tableau selon le type du champ)
 - "confidence": un score de confiance entre 0 et 100
-- "justification": l'explication de comment la valeur a ete obtenue
+- "justification": l'explication de comment la valeur a ete obtenue (mentionne si elle vient de l'agent 1, 2, ou d'une fusion)
 
-Reponds UNIQUEMENT avec le JSON, sans texte supplementaire.`
+Ne retourne QUE le JSON, sans texte supplementaire, sans markdown, sans code blocks.`
 
     const { data: compiledDataRaw, trace: compilerTrace, fileUrl: compilerFileUrl } = await callGeminiAgent(
       file,

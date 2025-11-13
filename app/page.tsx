@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import {
   Upload,
   FileText,
@@ -895,6 +896,101 @@ export default function TechnicalDrawingAnalyzer() {
                     <div className="flex-1">
                       <AnalysisResults result={analysisResult} onResultUpdate={setAnalysisResult} />
                     </div>
+
+                    {/* Section Traces des Agents */}
+                    {analysisResult.rawData?._traces && Array.isArray(analysisResult.rawData._traces) && analysisResult.rawData._traces.length > 0 && (
+                      <div className="mt-4 pt-4 border-t">
+                        <Accordion type="single" collapsible className="w-full">
+                          <AccordionItem value="agent-traces">
+                            <AccordionTrigger className="text-sm font-medium">
+                              <div className="flex items-center gap-2">
+                                <Settings className="h-4 w-4" />
+                                Traces des Agents ({analysisResult.rawData._traces.length})
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent>
+                              <div className="space-y-3 pt-2">
+                                {analysisResult.rawData._traces.map((trace: any, index: number) => {
+                                  // Debug: vérifier la longueur du prompt
+                                  const promptLength = trace?.input?.prompt ? (typeof trace.input.prompt === 'string' ? trace.input.prompt.length : JSON.stringify(trace.input.prompt).length) : 0
+                                  console.log(`[Trace ${index}] Agent: ${trace.agent}, Prompt length: ${promptLength}`)
+                                  return (
+                                  <Card key={index} className="border-blue-200 bg-blue-50/30">
+                                    <CardHeader className="pb-2">
+                                      <div className="flex items-center justify-between">
+                                        <CardTitle className="text-sm font-semibold text-blue-900">
+                                          {trace.agent || `Agent ${index + 1}`}
+                                        </CardTitle>
+                                        <div className="flex items-center gap-2">
+                                          <Badge variant="outline" className="text-xs">
+                                            {trace.duration ? `${trace.duration}ms` : "N/A"}
+                                          </Badge>
+                                          {trace.timestamp && (
+                                            <span className="text-xs text-gray-500">
+                                              {new Date(trace.timestamp).toLocaleTimeString()}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </CardHeader>
+                                    <CardContent className="space-y-3">
+                                      {/* Input */}
+                                      <div>
+                                        <Label className="text-xs font-semibold text-gray-700 mb-1 block">Input</Label>
+                                        <div className="bg-white border border-gray-200 rounded p-3 text-xs font-mono">
+                                          <div className="space-y-2">
+                                            {trace.input?.fileName && (
+                                              <div>
+                                                <span className="text-gray-500">Fichier:</span>{" "}
+                                                <span className="text-gray-900">{trace.input.fileName}</span>
+                                              </div>
+                                            )}
+                                            {trace.input?.prompt && (
+                                              <div className="mt-2">
+                                                <div className="text-gray-500 mb-1 flex items-center gap-2">
+                                                  <span>Prompt (complet):</span>
+                                                  <span className="text-xs text-gray-400">
+                                                    ({typeof trace.input.prompt === 'string' ? trace.input.prompt.length : JSON.stringify(trace.input.prompt).length} caractères)
+                                                  </span>
+                                                </div>
+                                                <div className="bg-gray-50 border-2 border-gray-300 rounded p-3 max-h-[600px] overflow-y-auto overflow-x-auto">
+                                                  <pre className="text-gray-900 whitespace-pre-wrap break-words text-xs leading-relaxed font-mono">
+                                                    {(() => {
+                                                      const promptText = typeof trace.input.prompt === 'string' 
+                                                        ? trace.input.prompt 
+                                                        : JSON.stringify(trace.input.prompt, null, 2)
+                                                      console.log(`[Display] Prompt length: ${promptText.length}, First 100 chars: ${promptText.substring(0, 100)}...`)
+                                                      return promptText
+                                                    })()}
+                                                  </pre>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Output */}
+                                      <div>
+                                        <Label className="text-xs font-semibold text-gray-700 mb-1 block">Output</Label>
+                                        <div className="bg-white border border-gray-200 rounded p-3 text-xs font-mono overflow-x-auto max-h-64 overflow-y-auto">
+                                          <pre className="whitespace-pre-wrap break-words text-gray-900">
+                                            {typeof trace.output === "object"
+                                              ? JSON.stringify(trace.output, null, 2)
+                                              : String(trace.output || "N/A")}
+                                          </pre>
+                                        </div>
+                                      </div>
+                                    </CardContent>
+                                  </Card>
+                                  )
+                                })}
+                              </div>
+                            </AccordionContent>
+                          </AccordionItem>
+                        </Accordion>
+                      </div>
+                    )}
 
                     {!isValidated && (
                       <div className="space-y-3 pt-4 border-t flex-shrink-0 mt-4">
