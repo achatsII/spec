@@ -8,8 +8,9 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const clientId = searchParams.get("clientId")
+    const parentId = searchParams.get("parentId")
 
-    console.log("Début de la requête GET_ALL pour les analyses", clientId ? `du client ${clientId}` : "")
+    console.log("Début de la requête GET_ALL pour les analyses", clientId ? `du client ${clientId}` : "", parentId ? `parent ${parentId}` : "")
 
     // Construire le filtre MongoDB
     const mongoFilter: any = {
@@ -25,6 +26,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Ajouter le filtre parentId si demandé (pour récupérer les versions)
+    if (parentId) {
+      mongoFilter["$or"] = [
+        { "json_data.parentId": { "$eq": parentId } },
+        { "_id": { "$eq": parentId } },
+      ]
+    }
+
     const response = await callGateway(`/api/v1/data/${DATA_TYPE}/filter`, {
       method: "POST",
       body: JSON.stringify({
@@ -35,12 +44,16 @@ export async function GET(request: NextRequest) {
     const data = await response.json()
 
     if (data.success && Array.isArray(data.results)) {
-      const analyses = data.results.map((result: any) => ({
-        id: result._id,
-        ...result.json_data,
-        createdAt: result.json_data?.createdAt || new Date().toISOString(),
-        updatedAt: result.json_data?.updatedAt || new Date().toISOString(),
-      }))
+      const analyses = data.results.map((result: any) => {
+        // S'assurer que l'ID MongoDB a la priorité sur l'ID dans json_data
+        const { id: jsonDataId, ...jsonDataWithoutId } = result.json_data || {}
+        return {
+          ...jsonDataWithoutId,
+          id: result._id, // Toujours utiliser l'ID MongoDB comme ID principal
+          createdAt: result.json_data?.createdAt || new Date().toISOString(),
+          updatedAt: result.json_data?.updatedAt || new Date().toISOString(),
+        }
+      })
 
       console.log("Analyses traitées:", analyses.length)
       return NextResponse.json({ success: true, analyses })
@@ -73,15 +86,50 @@ export async function POST(request: NextRequest) {
 
     const now = new Date().toISOString()
 
+    // Convertir les dates en ISO strings pour la sérialisation
+    const analysisToSave = {
+      ...analysis,
+      createdAt: analysis.createdAt instanceof Date ? analysis.createdAt.toISOString() : (analysis.createdAt || now),
+      updatedAt: analysis.updatedAt instanceof Date ? analysis.updatedAt.toISOString() : (analysis.updatedAt || now),
+      // Convertir aussi les dates dans analysisResult si présentes
+      analysisResult: analysis.analysisResult ? {
+        ...analysis.analysisResult,
+        timestamp: analysis.analysisResult.timestamp instanceof Date 
+          ? analysis.analysisResult.timestamp.toISOString()
+          : (analysis.analysisResult.timestamp || now),
+      } : null,
+      // Convertir les dates dans calculationResult si présentes
+      calculationResult: analysis.calculationResult ? {
+        ...analysis.calculationResult,
+        calculatedAt: analysis.calculationResult.calculatedAt instanceof Date
+          ? analysis.calculationResult.calculatedAt.toISOString()
+          : (analysis.calculationResult.calculatedAt || now),
+      } : null,
+    }
+
+    console.log("💾 Sauvegarde analyse:", {
+      title: analysisToSave.title,
+      hasFileUrl: !!analysisToSave.fileUrl,
+      hasAnalysisResult: !!analysisToSave.analysisResult,
+      hasCalculationResult: !!analysisToSave.calculationResult,
+      currentStep: analysisToSave.currentStep,
+      analysisResultKeys: analysisToSave.analysisResult ? Object.keys(analysisToSave.analysisResult) : [],
+      hasExtractedData: !!analysisToSave.analysisResult?.extractedData,
+      hasRawData: !!analysisToSave.analysisResult?.rawData,
+      hasFileName: !!analysisToSave.fileName,
+      hasFileType: !!analysisToSave.fileType,
+      quantity: analysisToSave.quantity,
+      clientId: analysisToSave.clientId,
+      profileId: analysisToSave.profileId,
+    })
+
     const response = await callGateway(`/api/v1/data/${DATA_TYPE}`, {
       method: "POST",
       body: JSON.stringify({
         description: `Analyse: ${analysis.title}`,
         json_data: {
-          ...analysis,
+          ...analysisToSave,
           app_identifier: APP_IDENTIFIER,
-          createdAt: now,
-          updatedAt: now,
         },
       }),
     })

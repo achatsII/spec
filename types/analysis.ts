@@ -208,6 +208,11 @@ export interface SavedAnalysis {
   updatedAt: Date
   createdBy?: string
   tags?: string[]
+  // Versioning
+  currentStep?: 1 | 2 | 3 | 4
+  parentId?: string // ID de la version parente (pour regrouper les versions)
+  versionNumber?: number // Numéro de version dans la série
+  isLatest?: boolean // Indique si c'est la dernière version
 }
 
 // ============================================

@@ -60,6 +60,19 @@ export default function AnalysesPage() {
   const filterAnalyses = () => {
     let filtered = [...analyses]
 
+    // Par défaut, ne montrer que les dernières versions (isLatest: true ou pas de parentId)
+    // Si une analyse a un parentId mais isLatest n'est pas défini, on la considère comme latest
+    filtered = filtered.filter((analysis) => {
+      // Si pas de parentId, c'est une analyse originale
+      if (!analysis.parentId) return true
+      // Si isLatest est true, c'est la dernière version
+      if (analysis.isLatest === true) return true
+      // Si isLatest n'est pas défini, on considère que c'est la dernière version (rétrocompatibilité)
+      if (analysis.isLatest === undefined) return true
+      // Sinon, c'est une ancienne version
+      return false
+    })
+
     // Filtre par recherche
     if (searchQuery.trim() !== "") {
       const query = searchQuery.toLowerCase()
@@ -101,12 +114,23 @@ export default function AnalysesPage() {
 
       if (data.success) {
         await loadAnalyses()
+        // Optionnel: afficher un message de succès
+        // alert("Analyse supprimée avec succès")
       } else {
-        alert("Erreur lors de la suppression: " + (data.error || "Erreur inconnue"))
+        const errorMessage = data.error || "Erreur inconnue"
+        console.error("Erreur lors de la suppression:", {
+          analysisId,
+          error: errorMessage,
+          debug: data.debug
+        })
+        alert(`Erreur lors de la suppression: ${errorMessage}`)
       }
     } catch (error) {
-      console.error("Erreur lors de la suppression:", error)
-      alert("Erreur lors de la suppression de l'analyse")
+      console.error("Erreur lors de la suppression:", {
+        analysisId,
+        error: error instanceof Error ? error.message : "Erreur inconnue"
+      })
+      alert(`Erreur lors de la suppression de l'analyse: ${error instanceof Error ? error.message : "Erreur inconnue"}`)
     }
   }
 
@@ -285,10 +309,24 @@ export default function AnalysesPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1 space-y-3">
                       {/* Titre et statut */}
-                      <div className="flex items-center gap-3">
-                        <h3 className="text-lg font-semibold text-gray-900">{analysis.title}</h3>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <div className="flex flex-col">
+                          <h3 className="text-lg font-semibold text-gray-900">{analysis.title || "Analyse sans titre"}</h3>
+                          {analysis.analysisResult?.extractedData?.reference?.valeur && 
+                           analysis.analysisResult.extractedData.reference.valeur !== "Non spécifié" &&
+                           analysis.analysisResult.extractedData.reference.valeur !== analysis.title && (
+                            <p className="text-sm text-gray-500 mt-1">
+                              Référence: {analysis.analysisResult.extractedData.reference.valeur}
+                            </p>
+                          )}
+                        </div>
                         <Badge className={getStatusColor(analysis.status)}>{getStatusLabel(analysis.status)}</Badge>
                         {analysis.validated && <Badge className="bg-green-100 text-green-800">✓ Validé</Badge>}
+                        {analysis.currentStep && (
+                          <Badge className="bg-blue-100 text-blue-800">
+                            Étape {analysis.currentStep}/4
+                          </Badge>
+                        )}
                       </div>
 
                       {/* Informations */}
@@ -349,6 +387,13 @@ export default function AnalysesPage() {
 
                     {/* Actions */}
                     <div className="flex gap-2 ml-4">
+                      {analysis.currentStep && analysis.currentStep < 4 && (
+                        <Link href={`/?load=${analysis.id}`}>
+                          <Button variant="default" size="sm" className="bg-[#0078FF] hover:bg-[#0078FF]/90">
+                            Continuer
+                          </Button>
+                        </Link>
+                      )}
                       <Button variant="ghost" size="sm" onClick={() => handleDeleteAnalysis(analysis.id)}>
                         <Trash2 className="h-4 w-4 text-red-600" />
                       </Button>

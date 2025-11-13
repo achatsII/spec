@@ -19,7 +19,7 @@ async function callGeminiAgent(
   agentName: string,
   retryCount = 0,
   maxRetries = 2,
-): Promise<{ data: any; trace: AgentTrace }> {
+): Promise<{ data: any; trace: AgentTrace; fileUrl: string }> {
   const startTime = Date.now()
 
   console.log(`[${agentName}] Démarrage de l'analyse via Gateway... (tentative ${retryCount + 1}/${maxRetries + 1})`)
@@ -170,7 +170,7 @@ async function callGeminiAgent(
 
     console.log(`[${agentName}] Analyse terminée en ${duration}ms`)
 
-    return { data: parsedData, trace }
+    return { data: parsedData, trace, fileUrl }
   } catch (error) {
     // Si c'est une erreur de retry, la relancer
     if (error instanceof Error && error.message.includes("tentatives")) {
@@ -205,7 +205,7 @@ export async function POST(request: NextRequest) {
     console.log("[ARCHITECTURE MULTI-AGENTS] Démarrage de l'analyse...")
 
     const principalPrompt = prompt
-    const { data: principalData, trace: principalTrace } = await callGeminiAgent(
+    const { data: principalData, trace: principalTrace, fileUrl: principalFileUrl } = await callGeminiAgent(
       file,
       principalPrompt,
       "Agent Principal",
@@ -231,7 +231,7 @@ TA MISSION:
 
 Reponds dans le meme format JSON que l'agent principal, mais avec des corrections et ameliorations. Si tu confirmes une valeur, augmente sa confiance. Si tu trouves une erreur, corrige-la et explique pourquoi dans la raison.`
 
-    const { data: verifierData, trace: verifierTrace } = await callGeminiAgent(
+    const { data: verifierData, trace: verifierTrace, fileUrl: verifierFileUrl } = await callGeminiAgent(
       file,
       verifierPrompt,
       "Agent Vérificateur",
@@ -261,22 +261,28 @@ TA MISSION:
 
 Reponds UNIQUEMENT avec le JSON final synthetise, sans texte supplementaire. Le format doit etre identique a celui des analyses individuelles.`
 
-    const { data: compiledData, trace: compilerTrace } = await callGeminiAgent(
+    const { data: compiledData, trace: compilerTrace, fileUrl: compilerFileUrl } = await callGeminiAgent(
       file,
       compilerPrompt,
       "Agent Compilateur",
     )
     allTraces.push(compilerTrace)
 
+    // Utiliser le fileUrl du premier agent (ils sont tous identiques)
+    const fileUrl = principalFileUrl || verifierFileUrl || compilerFileUrl
+
     // ============================================
     // RETOUR DU RÉSULTAT FINAL
     // ============================================
     console.log("[ARCHITECTURE MULTI-AGENTS] Analyse terminée avec succès")
     console.log(`[TRACES] ${allTraces.length} agents executés`)
+    console.log(`[FILEURL] ${fileUrl}`)
 
     return NextResponse.json({
       success: true,
       analysisData: compiledData,
+      fileUrl: fileUrl, // URL du fichier uploadé pour le preview
+      fileType: file.type, // Type du fichier
       traces: allTraces, // Traçabilité complète pour debugging
     })
   } catch (error) {

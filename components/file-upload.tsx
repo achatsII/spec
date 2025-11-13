@@ -102,6 +102,10 @@ export default function FileUpload({ onFileAnalyzed, clientProfile, isAnalyzing,
       console.log("Réponse de l'API:", data)
 
       if (data.success && data.analysisData) {
+        // Sauvegarder les traces des agents dans les données brutes
+        if (data.traces && Array.isArray(data.traces)) {
+          data.analysisData._traces = data.traces
+        }
         // Extraire les champs personnalisés si présents
         console.log("🔍 Données brutes reçues:", JSON.stringify(data.analysisData, null, 2))
         console.log("🔍 champs_personnalises présents?", !!data.analysisData.champs_personnalises)
@@ -121,6 +125,8 @@ export default function FileUpload({ onFileAnalyzed, clientProfile, isAnalyzing,
           fileName: selectedFile.name,
           timestamp: new Date(),
           rawData: data.analysisData,
+          fileUrl: data.fileUrl, // URL du fichier pour le preview
+          fileType: data.fileType || selectedFile.type, // Type du fichier
           extractedData: {
             reference: data.analysisData.référence_dessin ||
               data.analysisData.reference_dessin || {
@@ -152,9 +158,9 @@ export default function FileUpload({ onFileAnalyzed, clientProfile, isAnalyzing,
     } catch (error) {
       console.error("Erreur complète:", error)
       const errorMessage =
-        error.message.includes("CORS") || error.message.includes("NetworkError")
+        (error instanceof Error && (error.message.includes("CORS") || error.message.includes("NetworkError")))
           ? "Problème de connexion réseau. Veuillez réessayer ou contacter le support."
-          : `Erreur lors de l'analyse: ${error.message}`
+          : `Erreur lors de l'analyse: ${error instanceof Error ? error.message : "Erreur inconnue"}`
 
       setError(errorMessage)
     } finally {

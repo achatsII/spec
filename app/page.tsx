@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -54,6 +54,9 @@ export default function TechnicalDrawingAnalyzer() {
   const [isValidated, setIsValidated] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [calculationsValidated, setCalculationsValidated] = useState(false)
+  const [currentAnalysisId, setCurrentAnalysisId] = useState<string | null>(null)
+  const [parentAnalysisId, setParentAnalysisId] = useState<string | null>(null)
+  const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null)
 
   const handleFileSelected = (file: File) => {
     setSelectedFile(file)
@@ -62,20 +65,44 @@ export default function TechnicalDrawingAnalyzer() {
     setAnalysisTitle(titleFromFile)
   }
 
-  const handleFileAnalyzed = (result: AnalysisResult) => {
+  const handleFileAnalyzed = async (result: AnalysisResult) => {
     setAnalysisResult(result)
     setCalculationResult(null)
     setIsValidated(false)
     setCalculationsValidated(false)
     setCurrentStep(2)
 
-    // Améliorer le titre si une référence est trouvée
+    // Améliorer le titre si une référence est trouvée ET que le titre n'a pas été défini manuellement
+    // Ne mettre à jour le titre que s'il est vide ou s'il correspond au nom du fichier
     if (result.extractedData.reference?.valeur && result.extractedData.reference.valeur !== "Non spécifié") {
-      setAnalysisTitle(result.extractedData.reference.valeur)
+      const currentTitle = analysisTitle || ""
+      const titleFromFile = selectedFile?.name.replace(/\.(pdf|png|jpg|jpeg)$/i, "") || ""
+      // Ne mettre à jour que si le titre actuel est vide ou correspond au nom du fichier
+      if (!currentTitle || currentTitle === titleFromFile) {
+        setAnalysisTitle(result.extractedData.reference.valeur)
+      }
     }
+
+    // Sauvegarder automatiquement dès que l'analyse est terminée
+    // Utiliser un setTimeout pour s'assurer que les états sont mis à jour
+    // et que client/profil sont disponibles
+    setTimeout(async () => {
+      // Vérifier à nouveau que tout est disponible avant de sauvegarder
+      if (selectedClient && selectedProfile && result) {
+        await autoSaveAnalysis(2, false, false)
+      } else {
+        console.log("Sauvegarde différée: attente de client/profil")
+        // Retry après 1 seconde
+        setTimeout(async () => {
+          if (selectedClient && selectedProfile && result) {
+            await autoSaveAnalysis(2, false, false)
+          }
+        }, 1000)
+      }
+    }, 200)
   }
 
-  const handleValidateAnalysis = () => {
+  const handleValidateAnalysis = async () => {
     if (!analysisResult) return
 
     // Vérifier que les champs critiques sont présents
@@ -95,16 +122,51 @@ export default function TechnicalDrawingAnalyzer() {
 
     setIsValidated(true)
     setCurrentStep(3)
+    
+    // Sauvegarder automatiquement après validation avec un délai pour s'assurer que les états sont mis à jour
+    // Utiliser plusieurs tentatives pour s'assurer que la sauvegarde fonctionne même après chargement depuis l'historique
+    const saveAfterValidation = async (attempt = 0) => {
+      if (attempt > 5) {
+        console.error("❌ Impossible de sauvegarder après validation après plusieurs tentatives", {
+          hasAnalysisResult: !!analysisResult,
+          hasClient: !!selectedClient,
+          hasProfile: !!selectedProfile,
+          currentAnalysisId,
+        })
+        return
+      }
+      
+      if (analysisResult && selectedClient && selectedProfile) {
+        console.log("💾 Sauvegarde après validation, tentative:", attempt + 1, {
+          hasAnalysisId: !!currentAnalysisId,
+          analysisId: currentAnalysisId,
+        })
+        await autoSaveAnalysis(3, true, calculationsValidated)
+      } else {
+        // Retry après un court délai
+        console.log("⏳ Retry sauvegarde après validation, tentative:", attempt + 1, {
+          hasAnalysisResult: !!analysisResult,
+          hasClient: !!selectedClient,
+          hasProfile: !!selectedProfile,
+        })
+        setTimeout(() => saveAfterValidation(attempt + 1), 300)
+      }
+    }
+    
+    setTimeout(() => saveAfterValidation(), 300)
   }
 
   const handleCalculationComplete = (result: CalculationResult) => {
     setCalculationResult(result)
   }
 
-  const handleValidateCalculations = () => {
+  const handleValidateCalculations = async () => {
     if (!calculationResult) return
     setCalculationsValidated(true)
     setCurrentStep(4)
+    
+    // Sauvegarder automatiquement après validation des calculs
+    await autoSaveAnalysis(4, true, true)
   }
 
   const handleSaveAnalysis = async () => {
@@ -164,7 +226,533 @@ export default function TechnicalDrawingAnalyzer() {
     }
   }
 
+  // Fonction de sauvegarde automatique avec versioning
+  const autoSaveAnalysis = async (step: 1 | 2 | 3 | 4, validated: boolean, calculationsValidated: boolean) => {
+    // Vérifier les conditions minimales pour sauvegarder
+    if (!analysisResult) {
+      console.log("Sauvegarde automatique ignorée: pas de résultat d'analyse")
+      return
+    }
+
+    // Si pas de client ou profil, essayer de les récupérer depuis l'analyse chargée
+    let clientToUse = selectedClient
+    let profileToUse = selectedProfile
+    
+    if (!clientToUse || !profileToUse) {
+      console.log("Sauvegarde automatique: client ou profil manquant, tentative de récupération", {
+        hasClient: !!clientToUse,
+        hasProfile: !!profileToUse,
+        hasResult: !!analysisResult,
+        currentAnalysisId
+      })
+      
+      // Si on a un currentAnalysisId, essayer de charger l'analyse pour récupérer les infos client/profil
+      if (currentAnalysisId && !currentAnalysisId.startsWith("analysis_")) {
+        try {
+          const response = await fetch(`/api/analyses/${currentAnalysisId}`)
+          const data = await response.json()
+          if (data.success && data.analysis) {
+            // Créer un client minimal si nécessaire
+            if (!clientToUse && data.analysis.clientId && data.analysis.clientName) {
+              const minimalClient = {
+                id: data.analysis.clientId,
+                name: data.analysis.clientName,
+                createdAt: data.analysis.createdAt instanceof Date ? data.analysis.createdAt : new Date(data.analysis.createdAt),
+                updatedAt: data.analysis.updatedAt instanceof Date ? data.analysis.updatedAt : new Date(data.analysis.updatedAt),
+              }
+              clientToUse = minimalClient
+              setSelectedClient(minimalClient) // Mettre à jour l'état aussi
+            }
+            // Pour le profil, on doit le charger séparément car il nécessite plus de données
+            if (!profileToUse && data.analysis.profileId) {
+              try {
+                const profileResponse = await fetch(`/api/extraction-profiles/${data.analysis.profileId}`)
+                const profileData = await profileResponse.json()
+                if (profileData.success && profileData.profile) {
+                  profileToUse = profileData.profile
+                  setSelectedProfile(profileData.profile) // Mettre à jour l'état aussi
+                }
+              } catch (profileError) {
+                console.error("Erreur lors du chargement du profil:", profileError)
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Erreur lors de la récupération des infos client/profil:", error)
+        }
+      }
+      
+      // Si toujours pas de client ou profil après la tentative, retry après un délai
+      if (!clientToUse || !profileToUse) {
+        setTimeout(async () => {
+          if (selectedClient && selectedProfile && analysisResult) {
+            await autoSaveAnalysis(step, validated, calculationsValidated)
+          }
+        }, 500)
+        return
+      }
+    }
+
+    try {
+      console.log("💾 Sauvegarde automatique en cours...", {
+        step,
+        validated,
+        calculationsValidated,
+        title: analysisTitle,
+        hasCurrentAnalysisId: !!currentAnalysisId,
+        currentAnalysisId
+      })
+      
+      // Déterminer le statut selon l'étape
+      let status: "draft" | "analyzed" | "validated" | "completed" = "draft"
+      if (step >= 2) status = "analyzed"
+      if (validated) status = "validated"
+      if (calculationsValidated) status = "completed"
+
+      // Préparer l'analyse pour la sauvegarde
+      // Convertir les dates en ISO strings pour la sérialisation JSON
+      const now = new Date().toISOString()
+      
+      // S'assurer que analysisResult a un timestamp en string si c'est un Date
+      const analysisResultToSave = {
+        ...analysisResult,
+        timestamp: analysisResult.timestamp instanceof Date 
+          ? analysisResult.timestamp.toISOString()
+          : analysisResult.timestamp,
+      }
+      
+      // Si on a déjà une analyse (currentAnalysisId existe et n'est pas un ID client), mettre à jour
+      if (currentAnalysisId && !currentAnalysisId.startsWith("analysis_")) {
+        console.log("🔄 Mise à jour de l'analyse existante:", currentAnalysisId)
+        
+        // Charger l'analyse existante pour préserver createdAt et autres métadonnées
+        let existingAnalysis: SavedAnalysis | null = null
+        try {
+          const getResponse = await fetch(`/api/analyses/${currentAnalysisId}`)
+          const getData = await getResponse.json()
+          if (getData.success && getData.analysis) {
+            existingAnalysis = getData.analysis
+          }
+        } catch (error) {
+          console.error("Erreur lors de la récupération de l'analyse existante:", error)
+        }
+        
+        const updatedAnalysis: SavedAnalysis = {
+          id: currentAnalysisId,
+          title: analysisTitle || "Analyse sans titre",
+          clientId: clientToUse.id,
+          clientName: clientToUse.name,
+          profileId: profileToUse.id,
+          profileName: profileToUse.name,
+          fileName: analysisResult.fileName,
+          fileUrl: analysisResult.fileUrl,
+          fileType: analysisResult.fileType,
+          analysisResult: analysisResultToSave,
+          calculationResult: calculationResult || null,
+          status: status,
+          validated: validated,
+          contextText: contextText || undefined,
+          quantity: quantity || 1,
+          createdAt: existingAnalysis?.createdAt || new Date(now), // Préserver la date de création originale
+          updatedAt: new Date(now),
+          currentStep: step,
+          parentId: existingAnalysis?.parentId || parentAnalysisId || undefined,
+          versionNumber: existingAnalysis?.versionNumber || 1, // Garder le même numéro de version
+          isLatest: true,
+        }
+
+        const response = await fetch(`/api/analyses/${currentAnalysisId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatedAnalysis),
+        })
+
+        const data = await response.json()
+
+        if (data.success) {
+          console.log("✅ Analyse mise à jour avec succès:", {
+            id: currentAnalysisId,
+            step,
+            status,
+            validated,
+            title: analysisTitle
+          })
+          // Pas besoin de mettre à jour currentAnalysisId car c'est la même analyse
+        } else {
+          console.error("❌ Erreur lors de la mise à jour:", data.error)
+        }
+      } else {
+        // Créer une nouvelle analyse seulement si on n'en a pas déjà une
+        console.log("➕ Création d'une nouvelle analyse")
+        
+        const savedAnalysis: SavedAnalysis = {
+          id: `analysis_${Date.now()}`,
+          title: analysisTitle || "Analyse sans titre",
+          clientId: clientToUse.id,
+          clientName: clientToUse.name,
+          profileId: profileToUse.id,
+          profileName: profileToUse.name,
+          fileName: analysisResult.fileName,
+          fileUrl: analysisResult.fileUrl,
+          fileType: analysisResult.fileType,
+          analysisResult: analysisResultToSave,
+          calculationResult: calculationResult || null,
+          status: status,
+          validated: validated,
+          contextText: contextText || undefined,
+          quantity: quantity || 1,
+          createdAt: new Date(now),
+          updatedAt: new Date(now),
+          currentStep: step,
+          parentId: parentAnalysisId || undefined,
+          versionNumber: 1,
+          isLatest: true,
+        }
+
+        const response = await fetch("/api/analyses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(savedAnalysis),
+        })
+
+        const data = await response.json()
+
+        if (data.success && data.id) {
+          // Mettre à jour les IDs pour les prochaines sauvegardes
+          if (!parentAnalysisId) {
+            setParentAnalysisId(data.id)
+          }
+          setCurrentAnalysisId(data.id)
+          console.log("✅ Analyse sauvegardée automatiquement:", {
+            id: data.id,
+            step,
+            status,
+            validated,
+            title: analysisTitle,
+            hasAnalysisResult: !!savedAnalysis.analysisResult,
+            hasCalculationResult: !!savedAnalysis.calculationResult,
+            analysisResultKeys: savedAnalysis.analysisResult ? Object.keys(savedAnalysis.analysisResult) : [],
+            hasExtractedData: !!savedAnalysis.analysisResult?.extractedData,
+            hasFileUrl: !!savedAnalysis.fileUrl,
+            hasFileName: !!savedAnalysis.fileName,
+            quantity: savedAnalysis.quantity,
+            clientId: savedAnalysis.clientId,
+            profileId: savedAnalysis.profileId,
+          })
+        }
+      }
+    } catch (error) {
+      console.error("Erreur lors de la sauvegarde automatique:", error)
+      // Ne pas afficher d'erreur à l'utilisateur pour les sauvegardes automatiques
+    }
+  }
+
+  // Gérer le changement d'étape avec sauvegarde automatique
+  const handleStepChange = async (newStep: 1 | 2 | 3 | 4, preserveValidations = false) => {
+    const oldStep = currentStep
+    setCurrentStep(newStep)
+
+    // Si on recule et qu'on ne préserve pas les validations, réinitialiser
+    // MAIS préserver les validations si on revient juste pour voir/modifier les données
+    if (newStep < oldStep && !preserveValidations) {
+      if (newStep < 2) {
+        setIsValidated(false)
+        setCalculationsValidated(false)
+      } else if (newStep < 3) {
+        // Si on revient à l'étape 2 depuis l'étape 3, préserver la validation
+        // pour que l'utilisateur puisse voir ses modifications
+        // setIsValidated reste true si on était déjà validé
+        setCalculationsValidated(false)
+      } else if (newStep < 4) {
+        setCalculationsValidated(false)
+      }
+    }
+
+    // Sauvegarder automatiquement lors du changement d'étape
+    // Utiliser les validations actuelles (qui peuvent avoir été restaurées depuis l'historique)
+    // Utiliser un délai pour s'assurer que les états sont mis à jour
+    setTimeout(async () => {
+      if (analysisResult && selectedClient && selectedProfile) {
+        console.log("💾 Sauvegarde lors du changement d'étape:", {
+          from: oldStep,
+          to: newStep,
+          validated: isValidated && newStep >= 2,
+          calculationsValidated: calculationsValidated && newStep >= 3,
+        })
+        await autoSaveAnalysis(
+          newStep, 
+          isValidated && newStep >= 2, 
+          calculationsValidated && newStep >= 3
+        )
+      }
+    }, 200)
+  }
+
+  const loadAnalysis = async (analysisId: string) => {
+    try {
+      console.log("🔄 Chargement de l'analyse:", analysisId)
+      const response = await fetch(`/api/analyses/${analysisId}`)
+      const data = await response.json()
+
+      console.log("📥 Réponse brute de l'API pour ID:", analysisId, {
+        success: data.success,
+        hasAnalysis: !!data.analysis,
+        keys: data.analysis ? Object.keys(data.analysis) : [],
+        error: data.error,
+        debug: data.debug,
+        fullResponse: data
+      })
+
+      if (!data.success) {
+        console.error("❌ Erreur API pour ID:", analysisId, {
+          error: data.error,
+          debug: data.debug,
+          fullResponse: data
+        })
+        alert(`Erreur lors du chargement de l'analyse "${analysisId}": ${data.error || "Erreur inconnue"}`)
+        return
+      }
+
+      if (!data.analysis) {
+        console.error("❌ Analyse manquante dans la réponse:", data)
+        alert("Erreur: L'analyse n'a pas pu être chargée")
+        return
+      }
+
+      const analysis: SavedAnalysis = data.analysis
+      console.log("📦 Analyse reçue:", {
+        id: analysis.id,
+        title: analysis.title,
+        hasFileUrl: !!analysis.fileUrl,
+        hasAnalysisResult: !!analysis.analysisResult,
+        hasAnalysisResultFileUrl: !!analysis.analysisResult?.fileUrl,
+        currentStep: analysis.currentStep,
+        analysisKeys: analysis.analysisResult ? Object.keys(analysis.analysisResult) : [],
+      })
+
+      // Charger le client
+      if (analysis.clientId) {
+        try {
+          const clientResponse = await fetch(`/api/clients/${analysis.clientId}`)
+          const clientData = await clientResponse.json()
+          if (clientData.success && clientData.client) {
+            setSelectedClient(clientData.client)
+          } else {
+            // Si le chargement échoue, créer un client minimal à partir des données sauvegardées
+            console.warn("⚠️ Impossible de charger le client complet, création d'un client minimal")
+            if (analysis.clientId && analysis.clientName) {
+              setSelectedClient({
+                id: analysis.clientId,
+                name: analysis.clientName,
+                createdAt: analysis.createdAt instanceof Date ? analysis.createdAt : new Date(analysis.createdAt),
+                updatedAt: analysis.updatedAt instanceof Date ? analysis.updatedAt : new Date(analysis.updatedAt),
+              })
+            }
+          }
+        } catch (error) {
+          console.error("Erreur lors du chargement du client:", error)
+          // En cas d'erreur, créer un client minimal à partir des données sauvegardées
+          if (analysis.clientId && analysis.clientName) {
+            console.warn("⚠️ Création d'un client minimal à partir des données sauvegardées")
+            setSelectedClient({
+              id: analysis.clientId,
+              name: analysis.clientName,
+              createdAt: analysis.createdAt instanceof Date ? analysis.createdAt : new Date(analysis.createdAt),
+              updatedAt: analysis.updatedAt instanceof Date ? analysis.updatedAt : new Date(analysis.updatedAt),
+            })
+          }
+        }
+      }
+
+      // Charger le profil
+      if (analysis.profileId) {
+        try {
+          const profileResponse = await fetch(`/api/extraction-profiles/${analysis.profileId}`)
+          const profileData = await profileResponse.json()
+          if (profileData.success && profileData.profile) {
+            setSelectedProfile(profileData.profile)
+          } else {
+            // Si le chargement échoue, on ne peut pas créer un profil minimal car il nécessite des données complexes
+            console.error("❌ Impossible de charger le profil d'extraction")
+          }
+        } catch (error) {
+          console.error("Erreur lors du chargement du profil:", error)
+        }
+      }
+
+      // Restaurer les données
+      setAnalysisTitle(analysis.title)
+      setContextText(analysis.contextText || "")
+      setQuantity(analysis.quantity || 1)
+      
+      // Vérifier que analysisResult existe
+      if (!analysis.analysisResult) {
+        console.error("Erreur: analysisResult est manquant dans l'analyse chargée")
+        alert("Erreur: Les données d'analyse sont manquantes")
+        return
+      }
+      
+      // Restaurer l'analyse avec le fileUrl pour le preview
+      // Le fileUrl peut être au niveau racine de l'analyse ou dans analysisResult
+      const fileUrl = analysis.fileUrl || analysis.analysisResult?.fileUrl
+      const fileType = analysis.fileType || analysis.analysisResult?.fileType
+      
+      console.log("🔗 FileUrl restauré:", {
+        fromRoot: !!analysis.fileUrl,
+        fromAnalysisResult: !!analysis.analysisResult?.fileUrl,
+        finalFileUrl: fileUrl,
+      })
+      
+      // Convertir le timestamp en Date si c'est une string
+      const timestamp = analysis.analysisResult.timestamp
+        ? (typeof analysis.analysisResult.timestamp === 'string' 
+            ? new Date(analysis.analysisResult.timestamp) 
+            : analysis.analysisResult.timestamp instanceof Date
+            ? analysis.analysisResult.timestamp
+            : new Date(analysis.analysisResult.timestamp))
+        : new Date()
+      
+      const restoredAnalysisResult: AnalysisResult = {
+        ...analysis.analysisResult,
+        timestamp: timestamp,
+        fileUrl: fileUrl || undefined,
+        fileType: fileType || undefined,
+      }
+      
+      console.log("✅ AnalysisResult restauré:", {
+        hasFileUrl: !!restoredAnalysisResult.fileUrl,
+        hasFileType: !!restoredAnalysisResult.fileType,
+        timestamp: restoredAnalysisResult.timestamp,
+      })
+      
+      setAnalysisResult(restoredAnalysisResult)
+      setCalculationResult(analysis.calculationResult || null)
+      
+      // Restaurer l'étape et les validations selon l'étape sauvegardée
+      const savedStep = analysis.currentStep || 2
+      
+      // Restaurer les validations exactement comme elles étaient sauvegardées
+      // Si l'analyse a le statut "validated" ou "completed", les données étaient validées
+      setIsValidated(analysis.validated || analysis.status === "validated" || analysis.status === "completed")
+      
+      // Si l'analyse a le statut "completed", les calculs étaient validés
+      setCalculationsValidated(analysis.status === "completed")
+      
+      // Restaurer l'étape exacte sauvegardée (ne pas forcer à l'étape 2)
+      setCurrentStep(savedStep)
+      
+      // S'assurer qu'on utilise l'ID MongoDB et non un ID client
+      // L'ID MongoDB devrait être dans analysis.id (retourné par l'API)
+      // Vérifier que ce n'est pas un ID client (format: analysis_...)
+      const mongoId = analysis.id && !analysis.id.startsWith("analysis_") 
+        ? analysis.id 
+        : null
+      
+      if (mongoId) {
+        setCurrentAnalysisId(mongoId)
+        setParentAnalysisId(analysis.parentId || mongoId)
+      } else {
+        console.warn("⚠️ ID MongoDB manquant dans l'analyse chargée, utilisation de l'ID de l'URL:", analysisId)
+        // Si l'ID de l'URL est un ID MongoDB, l'utiliser
+        const urlMongoId = analysisId && !analysisId.startsWith("analysis_") ? analysisId : null
+        if (urlMongoId) {
+          setCurrentAnalysisId(urlMongoId)
+          setParentAnalysisId(analysis.parentId || urlMongoId)
+        } else {
+          console.error("❌ Impossible de déterminer l'ID MongoDB pour cette analyse")
+        }
+      }
+
+      console.log("✅ Analyse chargée depuis l'historique:", {
+        id: analysis.id,
+        step: savedStep,
+        validated: analysis.validated,
+        fileUrl: analysis.fileUrl,
+        hasAnalysisResult: !!analysis.analysisResult
+      })
+    } catch (error) {
+      console.error("Erreur lors du chargement de l'analyse:", error)
+      alert("Erreur lors du chargement de l'analyse")
+    }
+  }
+
+  // Charger une analyse depuis l'URL
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      const loadAnalysisId = params.get("load")
+      if (loadAnalysisId) {
+        loadAnalysis(loadAnalysisId)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Sauvegarder automatiquement quand l'analyse est terminée et que client/profil sont disponibles
+  useEffect(() => {
+    if (analysisResult && selectedClient && selectedProfile && currentStep === 2 && !currentAnalysisId) {
+      // Sauvegarder immédiatement après l'analyse complète
+      console.log("✅ Auto-sauvegarde déclenchée après analyse complète", {
+        hasResult: !!analysisResult,
+        hasClient: !!selectedClient,
+        hasProfile: !!selectedProfile,
+        step: currentStep
+      })
+      
+      // Utiliser un petit délai pour s'assurer que tous les états sont bien mis à jour
+      const timeout = setTimeout(() => {
+        autoSaveAnalysis(currentStep, isValidated, calculationsValidated)
+      }, 300)
+      
+      return () => clearTimeout(timeout)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysisResult, selectedClient, selectedProfile, currentStep, currentAnalysisId])
+
+  // Sauvegarder automatiquement quand les données extraites sont modifiées (avec debounce)
+  useEffect(() => {
+    // Ne sauvegarder que si on a une analyse chargée (nouvelle ou depuis l'historique)
+    if (analysisResult && selectedClient && selectedProfile && currentStep >= 2) {
+      // Si on n'a pas encore d'ID d'analyse, ne pas sauvegarder (attendre la première sauvegarde)
+      if (!currentAnalysisId) {
+        return
+      }
+
+      // Annuler le timeout précédent
+      if (saveTimeout) {
+        clearTimeout(saveTimeout)
+      }
+
+      // Créer un nouveau timeout pour sauvegarder après 2 secondes d'inactivité
+      const timeout = setTimeout(() => {
+        console.log("💾 Auto-sauvegarde après modification des données extraites", {
+          step: currentStep,
+          validated: isValidated,
+          calculationsValidated,
+          hasAnalysisId: !!currentAnalysisId
+        })
+        autoSaveAnalysis(currentStep, isValidated, calculationsValidated)
+      }, 2000)
+
+      setSaveTimeout(timeout)
+
+      // Cleanup
+      return () => {
+        if (timeout) {
+          clearTimeout(timeout)
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysisResult?.extractedData, currentStep, isValidated, calculationsValidated, currentAnalysisId])
+
   const resetForm = () => {
+    // Nettoyer le timeout de sauvegarde
+    if (saveTimeout) {
+      clearTimeout(saveTimeout)
+      setSaveTimeout(null)
+    }
+    
     setCurrentStep(1)
     setSelectedFile(null)
     setAnalysisResult(null)
@@ -174,6 +762,8 @@ export default function TechnicalDrawingAnalyzer() {
     setAnalysisTitle("")
     setContextText("")
     setQuantity(1)
+    setCurrentAnalysisId(null)
+    setParentAnalysisId(null)
   }
 
 
@@ -729,7 +1319,10 @@ export default function TechnicalDrawingAnalyzer() {
           <div className="flex justify-between items-center bg-white rounded-lg shadow-sm border p-4">
                         <Button
               variant="outline"
-              onClick={() => setCurrentStep((prev) => Math.max(1, prev - 1) as 1 | 2 | 3 | 4)}
+              onClick={async () => {
+                const newStep = Math.max(1, currentStep - 1) as 1 | 2 | 3 | 4
+                await handleStepChange(newStep)
+              }}
               disabled={currentStep === 1}
               className="flex items-center gap-2"
             >
@@ -744,12 +1337,12 @@ export default function TechnicalDrawingAnalyzer() {
             {currentStep < 4 && (
                 <Button
                 variant="outline"
-                onClick={() => {
+                onClick={async () => {
                   if (currentStep === 2 && isValidated) {
-                    setCurrentStep(3)
+                    await handleStepChange(3)
                   } else if (currentStep === 3) {
                     // Permettre de passer à l'étape suivante même sans valider les calculs
-                    setCurrentStep(4)
+                    await handleStepChange(4)
                   }
                 }}
                 disabled={
