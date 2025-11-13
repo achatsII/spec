@@ -134,7 +134,7 @@ export default function ExtractionProfileModal({ isOpen, onClose, profile, onSav
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-[95vw] sm:max-w-5xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>{profile ? "Modifier le profil d'extraction" : "Nouveau profil d'extraction"}</DialogTitle>
         </DialogHeader>
@@ -190,7 +190,7 @@ export default function ExtractionProfileModal({ isOpen, onClose, profile, onSav
                         </div>
                       </CardHeader>
                       <CardContent className="space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div className="space-y-1">
                             <Label className="text-xs">Nom technique</Label>
                             <Input
@@ -225,7 +225,7 @@ export default function ExtractionProfileModal({ isOpen, onClose, profile, onSav
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div className="space-y-1">
                             <Label className="text-xs">Type de champ</Label>
                             <Select
@@ -381,7 +381,7 @@ export default function ExtractionProfileModal({ isOpen, onClose, profile, onSav
                         </div>
                       </CardHeader>
                       <CardContent className="space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div className="space-y-1">
                             <Label className="text-xs">Nom de la formule</Label>
                             <Input
@@ -455,7 +455,7 @@ export default function ExtractionProfileModal({ isOpen, onClose, profile, onSav
                           )}
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div className="space-y-1">
                             <Label className="text-xs">Unité du résultat</Label>
                             <Input

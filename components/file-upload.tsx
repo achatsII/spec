@@ -188,11 +188,11 @@ IMPORTANT: Tu dois extraire UNIQUEMENT les champs listes ci-dessus. N'extrais au
       {error && (
         <Alert className="border-red-200 bg-red-50 flex-shrink-0">
           <AlertCircle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800 text-xs">{error}</AlertDescription>
+          <AlertDescription className="text-red-800 text-xs break-words">{error}</AlertDescription>
         </Alert>
       )}
 
-      <div className="border-2 border-dashed border-[#0078FF]/30 rounded-lg p-3 text-center hover:border-[#0078FF]/50 transition-colors flex-shrink-0">
+      <div className="border-2 border-dashed border-[#0078FF]/30 rounded-lg p-2 sm:p-3 text-center hover:border-[#0078FF]/50 transition-colors flex-shrink-0">
         <input
           type="file"
           ref={fileInputRef}

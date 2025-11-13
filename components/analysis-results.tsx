@@ -173,12 +173,12 @@ export default function AnalysisResults({ result, onResultUpdate }: AnalysisResu
 
     return (
       <div className="space-y-2">
-        <div className="flex justify-between items-center">
-          <Label className="text-sm font-medium capitalize">{label}</Label>
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+          <Label className="text-xs sm:text-sm font-medium capitalize break-words">{label}</Label>
           <div className="flex items-center gap-2">
-            <Badge className={getConfidenceColor(data.confiance || 0)}>{data.confiance || 0}%</Badge>
+            <Badge className={`text-xs ${getConfidenceColor(data.confiance || 0)}`}>{data.confiance || 0}%</Badge>
             {!isEditing && (
-              <Button variant="ghost" size="sm" onClick={() => startEdit(path, editInitialValue)}>
+              <Button variant="ghost" size="sm" onClick={() => startEdit(path, editInitialValue)} className="h-7 w-7 p-0">
                 <Edit className="h-3 w-3" />
               </Button>
             )}
@@ -191,28 +191,30 @@ export default function AnalysisResults({ result, onResultUpdate }: AnalysisResu
               <textarea
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
-                className="flex-1 min-h-[100px] p-2 border rounded text-sm font-mono"
+                className="flex-1 min-h-[100px] p-2 border rounded text-xs sm:text-sm font-mono w-full"
                 placeholder={editInitialValue}
               />
             ) : (
               <Input
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
-                className="flex-1"
+                className="flex-1 text-xs sm:text-sm"
                 placeholder={displayValue}
               />
             )}
             <div className="flex gap-2">
-              <Button size="sm" onClick={() => saveEdit(path)}>
-                <Check className="h-3 w-3" />
+              <Button size="sm" onClick={() => saveEdit(path)} className="h-7 text-xs">
+                <Check className="h-3 w-3 mr-1" />
+                Valider
               </Button>
-              <Button size="sm" variant="outline" onClick={cancelEdit}>
-                <X className="h-3 w-3" />
+              <Button size="sm" variant="outline" onClick={cancelEdit} className="h-7 text-xs">
+                <X className="h-3 w-3 mr-1" />
+                Annuler
               </Button>
             </div>
           </div>
         ) : (
-          <div className="text-sm">
+          <div className="text-xs sm:text-sm">
             {isComplexValue ? (
               <div className="space-y-2">
                 {Array.isArray(data.valeur) ? (
@@ -220,20 +222,20 @@ export default function AnalysisResults({ result, onResultUpdate }: AnalysisResu
                   <div className="space-y-2">
                     {data.valeur.map((item: any, index: number) => (
                       <Card key={index} className="border-2 border-blue-100 bg-blue-50/30">
-                        <CardContent className="p-3">
+                        <CardContent className="p-2 sm:p-3">
                           {typeof item === "object" ? (
                             <div className="space-y-1">
                               {Object.entries(item).map(([key, value]: [string, any]) => (
-                                <div key={key} className="flex justify-between items-start gap-2">
+                                <div key={key} className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1 sm:gap-2">
                                   <span className="text-xs font-medium text-gray-600 capitalize">{key}:</span>
-                                  <span className="text-sm font-semibold text-gray-900 text-right">
+                                  <span className="text-xs sm:text-sm font-semibold text-gray-900 sm:text-right break-words">
                                     {String(value)}
                                   </span>
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <div className="text-sm font-medium">{String(item)}</div>
+                            <div className="text-xs sm:text-sm font-medium break-words">{String(item)}</div>
                           )}
                         </CardContent>
                       </Card>
@@ -242,12 +244,12 @@ export default function AnalysisResults({ result, onResultUpdate }: AnalysisResu
                 ) : (
                   // Afficher un objet unique
                   <Card className="border-2 border-green-100 bg-green-50/30">
-                    <CardContent className="p-3">
+                    <CardContent className="p-2 sm:p-3">
                       <div className="space-y-1">
                         {Object.entries(data.valeur).map(([key, value]: [string, any]) => (
-                          <div key={key} className="flex justify-between items-start gap-2">
+                          <div key={key} className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1 sm:gap-2">
                             <span className="text-xs font-medium text-gray-600 capitalize">{key}:</span>
-                            <span className="text-sm font-semibold text-gray-900 text-right">
+                            <span className="text-xs sm:text-sm font-semibold text-gray-900 sm:text-right break-words">
                               {String(value)}
                             </span>
                           </div>
@@ -258,9 +260,9 @@ export default function AnalysisResults({ result, onResultUpdate }: AnalysisResu
                 )}
               </div>
             ) : (
-              <div className="font-medium">{displayValue}</div>
+              <div className="font-medium break-words">{displayValue}</div>
             )}
-            {data.raison && <div className="text-gray-500 text-xs mt-1">{data.raison}</div>}
+            {data.raison && <div className="text-gray-500 text-xs mt-1 break-words">{data.raison}</div>}
           </div>
         )}
       </div>
@@ -271,15 +273,16 @@ export default function AnalysisResults({ result, onResultUpdate }: AnalysisResu
 
   return (
     <div className="space-y-4 pb-4">
-      <div className="text-sm text-gray-500">
-        Fichier: {result.fileName} • {result.timestamp.toLocaleString()}
+      <div className="text-xs sm:text-sm text-gray-500 break-words">
+        <div className="font-medium mb-1">Fichier: {result.fileName}</div>
+        <div>{result.timestamp.toLocaleString()}</div>
       </div>
 
       {/* Tous les champs extraits dans une seule liste */}
       {allFields.length > 0 ? (
         <Card>
-          <CardContent className="pt-6">
-            <div className="space-y-4">
+          <CardContent className="pt-4 sm:pt-6 px-3 sm:px-6">
+            <div className="space-y-3 sm:space-y-4">
               {allFields.map((field) => (
                 <div key={field.path}>{renderFieldWithEdit(field)}</div>
               ))}
@@ -288,8 +291,8 @@ export default function AnalysisResults({ result, onResultUpdate }: AnalysisResu
         </Card>
       ) : (
         <Card>
-          <CardContent className="pt-6">
-            <div className="text-center text-gray-500 text-sm py-4">
+          <CardContent className="pt-4 sm:pt-6 px-3 sm:px-6">
+            <div className="text-center text-gray-500 text-xs sm:text-sm py-4">
               Aucune donnée extraite
             </div>
           </CardContent>

@@ -298,7 +298,7 @@ export default function TechnicalDrawingAnalyzer() {
           const versionsData = await versionsResponse.json()
           if (versionsData.success && Array.isArray(versionsData.analyses)) {
             // Trouver le numéro de version le plus élevé
-            const maxVersion = versionsData.analyses.reduce((max, analysis) => {
+            const maxVersion = versionsData.analyses.reduce((max: number, analysis: any) => {
               return Math.max(max, analysis.versionNumber || 1)
             }, 1)
             versionNumber = maxVersion + 1
@@ -727,8 +727,8 @@ export default function TechnicalDrawingAnalyzer() {
   // ÉTAPE 1 : CONFIGURATION
   const renderStep1 = () => {
     return (
-      <div className="h-[calc(100vh-280px)] overflow-hidden">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+      <div className="h-[calc(100vh-280px)] sm:h-[calc(100vh-320px)] overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 h-full">
           {/* Colonne gauche : Configuration */}
           <div className="lg:col-span-1 h-full flex flex-col overflow-hidden">
             <div className="flex-1 flex flex-col gap-3 overflow-hidden">
@@ -741,7 +741,7 @@ export default function TechnicalDrawingAnalyzer() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-3 pb-3 px-4">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <Label htmlFor="title" className="text-xs">
                         Titre <span className="text-red-500">*</span>
@@ -784,7 +784,7 @@ export default function TechnicalDrawingAnalyzer() {
               </Card>
 
               {/* Client et Profil sur la même ligne */}
-              <div className="grid grid-cols-2 gap-3 flex-shrink-0">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-shrink-0">
                 <Card className="border-[#0078FF]/20">
                   <CardHeader className="bg-[#0078FF]/5 py-2 px-4">
                     <CardTitle className="flex items-center gap-2 text-[#0078FF] text-sm">
@@ -858,8 +858,8 @@ export default function TechnicalDrawingAnalyzer() {
   // ÉTAPE 2 : VALIDATION
   const renderStep2 = () => {
     return (
-      <div className="min-h-[calc(100vh-280px)] overflow-y-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-6">
+      <div className="min-h-[calc(100vh-280px)] sm:min-h-[calc(100vh-320px)] overflow-y-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 pb-4 sm:pb-6">
           {/* Colonne gauche : Aperçu du plan (gros) */}
           <div className="lg:col-span-1 flex flex-col">
             <Card className="border-[#0078FF]/20 flex flex-col">
@@ -947,8 +947,8 @@ export default function TechnicalDrawingAnalyzer() {
   // ÉTAPE 3 : CALCULS
   const renderStep3 = () => {
     return (
-      <div className="h-[calc(100vh-280px)] overflow-hidden">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+      <div className="h-[calc(100vh-280px)] sm:h-[calc(100vh-320px)] overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 h-full">
           {/* Colonne gauche : Données extraites */}
           <div className="lg:col-span-1 h-full flex flex-col">
             <Card className="border-[#0078FF]/20 h-full flex flex-col">
@@ -1194,78 +1194,80 @@ export default function TechnicalDrawingAnalyzer() {
             </div>
           </div>
 
-          {/* Indicateur de progression */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
+          {/* Indicateur de progression - Responsive */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm font-medium ${
                   currentStep >= 1 ? "bg-[#0078FF] text-white" : "bg-gray-200 text-gray-500"
                 }`}
               >
                 1
               </div>
-              <span className={`text-sm ${currentStep >= 1 ? "text-gray-900 font-medium" : "text-gray-500"}`}>
-                Configuration
+              <span className={`text-xs sm:text-sm ${currentStep >= 1 ? "text-gray-900 font-medium" : "text-gray-500"}`}>
+                <span className="hidden sm:inline">Configuration</span>
+                <span className="sm:hidden">Config</span>
               </span>
             </div>
 
-            <div className="flex-1 h-1 bg-gray-200 rounded">
+            <div className="hidden sm:block flex-1 h-1 bg-gray-200 rounded">
               <div
                 className="h-full bg-[#0078FF] rounded transition-all"
                 style={{ width: `${((currentStep - 1) / 3) * 100}%` }}
               />
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm font-medium ${
                   currentStep >= 2 ? "bg-[#0078FF] text-white" : "bg-gray-200 text-gray-500"
                 }`}
               >
                 2
               </div>
-              <span className={`text-sm ${currentStep >= 2 ? "text-gray-900 font-medium" : "text-gray-500"}`}>
+              <span className={`text-xs sm:text-sm ${currentStep >= 2 ? "text-gray-900 font-medium" : "text-gray-500"}`}>
                 Validation
               </span>
             </div>
 
-            <div className="flex-1 h-1 bg-gray-200 rounded">
+            <div className="hidden sm:block flex-1 h-1 bg-gray-200 rounded">
               <div
                 className="h-full bg-[#0078FF] rounded transition-all"
                 style={{ width: `${currentStep >= 3 ? "100%" : "0%"}` }}
               />
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm font-medium ${
                   currentStep >= 3 ? "bg-[#0078FF] text-white" : "bg-gray-200 text-gray-500"
                 }`}
               >
                 3
               </div>
-              <span className={`text-sm ${currentStep >= 3 ? "text-gray-900 font-medium" : "text-gray-500"}`}>
+              <span className={`text-xs sm:text-sm ${currentStep >= 3 ? "text-gray-900 font-medium" : "text-gray-500"}`}>
                 Calculs
               </span>
             </div>
 
-            <div className="flex-1 h-1 bg-gray-200 rounded">
+            <div className="hidden sm:block flex-1 h-1 bg-gray-200 rounded">
               <div
                 className="h-full bg-[#0078FF] rounded transition-all"
                 style={{ width: `${currentStep >= 4 ? "100%" : "0%"}` }}
               />
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm font-medium ${
                   currentStep >= 4 ? "bg-[#0078FF] text-white" : "bg-gray-200 text-gray-500"
                 }`}
               >
                 4
               </div>
-              <span className={`text-sm ${currentStep >= 4 ? "text-gray-900 font-medium" : "text-gray-500"}`}>
-                Sauvegarde
+              <span className={`text-xs sm:text-sm ${currentStep >= 4 ? "text-gray-900 font-medium" : "text-gray-500"}`}>
+                <span className="hidden sm:inline">Sauvegarde</span>
+                <span className="sm:hidden">Save</span>
               </span>
             </div>
           </div>
@@ -1273,26 +1275,27 @@ export default function TechnicalDrawingAnalyzer() {
 
         {/* Navigation entre les étapes */}
         {(currentStep > 1 || analysisResult) && (
-          <div className="flex justify-between items-center bg-white rounded-lg shadow-sm border p-4">
-                        <Button
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-3 bg-white rounded-lg shadow-sm border p-3 sm:p-4">
+            <Button
               variant="outline"
               onClick={async () => {
                 const newStep = Math.max(1, currentStep - 1) as 1 | 2 | 3 | 4
                 await handleStepChange(newStep)
               }}
               disabled={currentStep === 1}
-              className="flex items-center gap-2"
+              className="flex items-center gap-2 w-full sm:w-auto text-xs sm:text-sm"
             >
               <ArrowLeft className="h-4 w-4" />
               <span className="hidden sm:inline">Étape précédente</span>
-                        </Button>
+              <span className="sm:hidden">Précédent</span>
+            </Button>
 
-            <div className="text-sm text-gray-600">
+            <div className="text-xs sm:text-sm text-gray-600 font-medium">
               Étape {currentStep} sur 4
-          </div>
+            </div>
 
             {currentStep < 4 && (
-                <Button
+              <Button
                 variant="outline"
                 onClick={async () => {
                   if (currentStep === 2 && isValidated) {
@@ -1305,9 +1308,10 @@ export default function TechnicalDrawingAnalyzer() {
                 disabled={
                   (currentStep === 2 && !isValidated)
                 }
-                className="flex items-center gap-2"
+                className="flex items-center gap-2 w-full sm:w-auto text-xs sm:text-sm"
               >
                 <span className="hidden sm:inline">Étape suivante</span>
+                <span className="sm:hidden">Suivant</span>
                 <ArrowRight className="h-4 w-4" />
               </Button>
             )}
